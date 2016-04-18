@@ -54,7 +54,7 @@ Lopper supports rudimentary index manipulation, without providing the full funct
 ```
 Expr<1>(image1).offset(1, 0) - Expr<1>(image1); // expression for forward horizontal gradient
 Expr<1>(image1).reindex([](int y) { return image1.getHeight() - 1 - y; }); // expression for flipping the image vertically.
-``
+```
 
 See the unit tests for more examples.
 
