@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="UTF-8">
+    <title>Lopper by dropbox</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" type="text/css" href="stylesheets/normalize.css" media="screen">
+    <link href='https://fonts.googleapis.com/css?family=Open+Sans:400,700' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen">
+    <link rel="stylesheet" type="text/css" href="stylesheets/github-light.css" media="screen">
+  </head>
+  <body>
+    <section class="page-header">
+      <h1 class="project-name">Lopper</h1>
+      <h2 class="project-tagline">A lightweight C++ framework for vectorizing image-processing code</h2>
+      <a href="https://github.com/dropbox/lopper" class="btn">View on GitHub</a>
+      <a href="https://github.com/dropbox/lopper/zipball/master" class="btn">Download .zip</a>
+      <a href="https://github.com/dropbox/lopper/tarball/master" class="btn">Download .tar.gz</a>
+    </section>
+
+    <section class="main-content">
+      <h1>
+<a id="lopper" class="anchor" href="#lopper" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Lopper</h1>
+
+<p>Lopper is a lightweight C++ template meta-programming framework for making vectorizing image-processing code easy, synthesized during Dropbox's 2016 hack week. It was inspired by many (more general) predecessors like Eigen and Halide, but the core focus was in enabling precise control over inlining of primitive computation. It can target platforms that support SSE (4.2) or NEON instructions. Note that Lopper does some very naughty things, like placing variables on the stack without being explicit about it, so take care when using it.</p>
+
+<h2>
+<a id="requirements" class="anchor" href="#requirements" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Requirements</h2>
+
+<p>Lopper consists only of C++ header files, so no pre-compilation is necessary. Simply include "lopper/lopper.hpp" and compile your code with C++11-standard-compliant compiler. You will need CMake to build the unit test.</p>
+
+<h2>
+<a id="usage" class="anchor" href="#usage" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Usage</h2>
+
+<p>The code snippes below assume that <code>using namespace lopper</code> is in effect.</p>
+
+<p>Images can be wrapped into an expression as follows:</p>
+
+<pre><code>auto a = Expr&lt;1&gt;(image); // image must be a 1-channel image.
+auto rgb = ExprCache(Expr&lt;3&gt;(image)); // multi-channel images must first be wrapped by ExprCache.
+auto r = rgb.get&lt;0&gt;();
+</code></pre>
+
+<p>One can combine expressions to form other expressions:</p>
+
+<pre><code>auto c = a + a * a;
+auto d = c + 3;
+auto e = c * d; // implicitly expand to (a + a * a) * ((a + a * a) + 3)
+...
+</code></pre>
+
+<p>In general, every expression will be inlined during evaluation. In order to reuse values, use <code>ExprCache</code>; you must assign the resulting expression to a variable, owing to macro expansion that happens, and must first declare <code>ExprPrepareContext</code> as shown below, but it can be very powerful in controlling exactly what arithmetic happens in the evaluation.</p>
+
+<pre><code>ExprPrepareContext();
+auto c = ExprCache(a + a * a);
+auto d = c + 3;
+auto e = c * d; // implicitly equivalent to c = a + a * a; e = c * (c + 3)
+...
+</code></pre>
+
+<p>To trigger evaluation, use the <code>ExprEval</code> macro on an assignment operation if you haven't inlined anything:</p>
+
+<pre><code>auto a = Expr&lt;1&gt;(image1) + Expr&lt;1&gt;(image2);
+ExprEval(Expr&lt;1&gt;(image3) = a * a);
+</code></pre>
+
+<p>On the other hand, you must use <code>ExprEvalWithContext</code> macro otherwise:</p>
+
+<pre><code>ExprPrepareContext();
+auto a = ExprCache(Expr&lt;1&gt;(image1) + Expr&lt;1&gt;(image2));
+ExprEvalWithContext(Expr&lt;1&gt;(image3) = a * a);
+</code></pre>
+
+<p>Lopper supports rudimentary index manipulation, without providing the full functional expansion (e.g. Halide). Any expression that's instantiated directly from a single-channel image can call <code>reindex</code> or <code>offset</code>.</p>
+
+<pre><code>Expr&lt;1&gt;(image1).offset(1, 0) - Expr&lt;1&gt;(image1); // expression for forward horizontal gradient
+Expr&lt;1&gt;(image1).reindex([](int y) { return image1.getHeight() - 1 - y; }); // expression for flipping the image vertically.
+</code></pre>
+
+<p>See the unit tests for more examples.</p>
+
+<h2>
+<a id="requirements-for-contributors" class="anchor" href="#requirements-for-contributors" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Requirements for Contributors</h2>
+
+<p>If you plan to contribute a patch, please read the Contributor License Agreement at <a href="https://opensource.dropbox.com/cla/">https://opensource.dropbox.com/cla/</a>.</p>
+
+<h2>
+<a id="license" class="anchor" href="#license" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>License</h2>
+
+<p>Lopper is offered under Apache License 2.0. Please see license.txt for details.</p>
+
+<h2>
+<a id="contributors" class="anchor" href="#contributors" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Contributors</h2>
+
+<p>Lopper was initially written by Jongmin Baek (<a href="mailto:jongmin@dropbox.com">jongmin@dropbox.com</a>) with plenty of help and advice from Leonard Fink (<a href="mailto:leonard@dropbox.com">leonard@dropbox.com</a>), Lailin Chen (<a href="mailto:lailin@dropbox.com">lailin@dropbox.com</a>) and Ying Xiong (<a href="mailto:yxiong@dropbox.com">yxiong@dropbox.com</a>).</p>
+
+      <footer class="site-footer">
+        <span class="site-footer-owner"><a href="https://github.com/dropbox/lopper">Lopper</a> is maintained by <a href="https://github.com/dropbox">dropbox</a>.</span>
+
+        <span class="site-footer-credits">This page was generated by <a href="https://pages.github.com">GitHub Pages</a> using the <a href="https://github.com/jasonlong/cayman-theme">Cayman theme</a> by <a href="https://twitter.com/jasonlong">Jason Long</a>.</span>
+      </footer>
+
+    </section>
+
+  
+  </body>
+</html>
