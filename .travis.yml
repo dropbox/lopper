@@ -1,0 +1,21 @@
+language: cpp
+sudo: required
+dist: trusty
+compiler:
+  - clang
+  - gcc
+os:
+  - linux
+  - osx
+before_install:
+  - sudo apt-get update
+  - sudo apt-get install libgtest-dev
+  - "cd /usr/srv/gtest && sudo cmake . && sudo cmake --build . && sudo mv libg* /usr/local/lib/ ; cd -"
+  - echo $LANG
+  - echo $CXX
+script: "mkdir cmake_build; cd cmake_build; cmake ..; make run_test"
+branches:
+  only:
+  - master
+notifications:
+  email: false
