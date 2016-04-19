@@ -11,7 +11,7 @@ Lopper consists only of C++ header files, so no pre-compilation is necessary. Si
 Usage
 -----
 
-The code snippes below assume that `using namespace lopper` is in effect.
+The code snippets below assume that `using namespace lopper` is in effect.
 
 Images can be wrapped into an expression as follows:
 ```
