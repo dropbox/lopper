@@ -321,6 +321,30 @@ TYPED_TEST_P(LopperTypedTest, CacheTest) {
   }
 }
 
+TYPED_TEST_P(LopperTypedTest, TwoChannelTest) {
+  Image<uint8_t> in(2, 99, 70);
+  for (int y = 0; y < in.getHeight(); y++) {
+    for (int x = 0; x < in.getWidth(); x++) {
+      in(x, y, 0) = 123;
+      in(x, y, 1) = 89;
+    }
+  }
+  Image<int32_t> out(1, 99, 70);
+  // Try computing R + G
+  ExprPrepareContext();
+  auto ab = ExprCache(Expr<2>(in));
+  auto a = ab.get<0>();
+  auto b = ab.get<1>();
+  ExprEvalWithContextSIMD(TypeParam::value, Expr<1>(out) = a + b);
+  for (int y = 0; y < in.getHeight(); y++) {
+    for (int x = 0; x < in.getWidth(); x++) {
+      int32_t a = in(x, y, 0);
+      int32_t b = in(x, y, 1);
+      ASSERT_EQ(a + b, out(x, y, 0));
+    }
+  }
+}
+
 TYPED_TEST_P(LopperTypedTest, ThreeChannelTest) {
   Image<uint8_t> in(3, 100, 100);
   for (int y = 0; y < in.getHeight(); y++) {
@@ -435,6 +459,7 @@ REGISTER_TYPED_TEST_CASE_P(LopperTypedTest,
                            MinimumMaximumTest,
                            ReindexOffsetTest,
                            CacheTest,
+                           TwoChannelTest,
                            ThreeChannelTest,
                            RerunTest,
                            RGBToHSVTest,
