@@ -12,6 +12,7 @@
 #include "image.hpp"
 #include "multiple.hpp"
 #include "primitives.hpp"
+#include "util.hpp"
 
 namespace lopper {
 namespace internal {
@@ -280,12 +281,12 @@ template<> inline void _PixelStorer<LOPPER_TARGET>::store3<int32_t>(int32_t* ptr
 
 /*=============================== Expressions for writing memory ===============================*/
 
-template<typename T, typename ... E> struct _ExprSave : public NaryExpr<E...> {
-  _ExprSave(const std::shared_ptr<_Image<T>>& image, const E&... e)
+template<typename T, typename ... E> struct _ExprSaveBase : public NaryExpr<E...> {
+  _ExprSaveBase(const std::shared_ptr<_Image<T>>& image, const E&... e)
     : NaryExpr<E...>(e...), _image(image) {
     if (image->getChannelCount() != sizeof...(E)) { throw LopperException("Invalid number of channels"); }
   }
-  virtual ~_ExprSave() {}
+  virtual ~_ExprSaveBase() {}
   virtual int getWidth() const { return _image->getWidth(); }
   virtual int getHeight() const { return _image->getHeight(); }
   virtual size_t getSIMDClearance() const = 0;
@@ -293,8 +294,8 @@ protected:
   std::shared_ptr<_Image<T>> _image;
 };
 
-template<typename T, typename E> struct _ExprSave1 : public _ExprSave<T, E> {
-  _ExprSave1(const std::shared_ptr<_Image<T>>& image, const E& e) : _ExprSave<T, E>(image, e) {}
+template<typename T, typename E> struct _ExprSave1 : public _ExprSaveBase<T, E> {
+  _ExprSave1(const std::shared_ptr<_Image<T>>& image, const E& e) : _ExprSaveBase<T, E>(image, e) {}
 
   virtual size_t getSIMDClearance() const {
     const size_t bytes_written = _PixelStorer<LOPPER_TARGET>::template bytesPerOp<T, 1>();
@@ -317,9 +318,9 @@ private:
   mutable T* _ptr;
 };
 
-template<typename T, typename E0, typename E1, typename E2> struct _ExprSave3 : public _ExprSave<T, E0, E1, E2> {
+template<typename T, typename E0, typename E1, typename E2> struct _ExprSave3 : public _ExprSaveBase<T, E0, E1, E2> {
   _ExprSave3(std::shared_ptr<_Image<T>>& image, const E0& e0, const E1& e1, const E2& e2)
-    : _ExprSave<T, E0, E1, E2>(image, e0, e1, e2) {}
+    : _ExprSaveBase<T, E0, E1, E2>(image, e0, e1, e2) {}
 
   virtual size_t getSIMDClearance() const {
     const size_t bytes_written = _PixelStorer<LOPPER_TARGET>::template bytesPerOp<T, 3>();
@@ -446,15 +447,15 @@ private:
   template<typename, bool, bool> friend struct _ExprImage1;
 };
 
-template<typename T> struct _ExprImage3 : public NullaryExpr<typename IOTypeTrait<T>::type> {
-  _ExprImage3(std::shared_ptr<_Image<T>> image) : _image(image) {
-    if (_image->getChannelCount() != 3) { throw LopperException("Invalid number of channels"); }
+template<typename T, size_t C> struct _ExprImage : public NullaryExpr<typename IOTypeTrait<T>::type> {
+  _ExprImage(std::shared_ptr<_Image<T>> image) : _image(image) {
+    if (_image->getChannelCount() != C) { throw LopperException("Invalid number of channels"); }
   }
 
   virtual int getWidth() const { return _image->getWidth(); }
   virtual int getHeight() const { return _image->getHeight(); }
   virtual size_t getSIMDClearance() const {
-    const size_t bytes_read = _PixelLoader<LOPPER_TARGET>::template bytesPerOp<T, 3>();
+    const size_t bytes_read = _PixelLoader<LOPPER_TARGET>::template bytesPerOp<T, C>();
     const size_t bytes_per_pixel = sizeof(T);
     return (bytes_read + (bytes_per_pixel - 1)) / bytes_per_pixel;
   }
@@ -462,14 +463,14 @@ template<typename T> struct _ExprImage3 : public NullaryExpr<typename IOTypeTrai
   void prepareRow(const int y) const { _ptr = _image->getRowPointer(y); }
 
   template<InstructionSet S, size_t U, typename ... Cxt>
-  MultipleIOTuple<T, 3, S> inline eval(const int x, const Cxt& ... ) const {
-    return _PixelLoader<S>::template load<T, 3>(_ptr + x * 3);
+  MultipleIOTuple<T, C, S> inline eval(const int x, const Cxt& ... ) const {
+    return _PixelLoader<S>::template load<T, C>(_ptr + x * C);
   }
 
-  template<typename E0, typename E1, typename E2> auto operator=(const std::tuple<E0, E1, E2>& t) ->
-    _ExprSave3<T, E0, E1, E2> {
-      return _ExprSave3<T, E0, E1, E2>(_image, std::get<0>(t), std::get<1>(t), std::get<2>(t));
-    }
+  template<typename ... E> auto operator=(const std::tuple<E...>& t) ->
+    SFINAE<(sizeof...(E) == C && sizeof...(E) == 3), _ExprSave3<T, E...>> {
+    return _ExprSave3<T, E...>(_image, std::get<0>(t), std::get<1>(t), std::get<2>(t));
+  }
 
 private:
   mutable T* _ptr;
@@ -485,10 +486,10 @@ template<size_t C, typename T, typename F = SFINAE<C == 1, _ExprImage1<T>>>
   return _ExprImage1<T>(std::shared_ptr<::lopper::_Image<T>>(std::shared_ptr<::lopper::_Image<T>>(),
                                                              dynamic_cast<::lopper::_Image<T>*>(&image)));
 }
-template<size_t C, typename T, typename F = SFINAE<C == 3, _ExprImage3<T>>>
-  _ExprImage3<T> Expr(::lopper::_Image<T>& image) {
-  return _ExprImage3<T>(std::shared_ptr<::lopper::_Image<T>>(std::shared_ptr<::lopper::_Image<T>>(),
-                                                             dynamic_cast<::lopper::_Image<T>*>(&image)));
+template<size_t C, typename T, typename F = SFINAE<C == 2 || C == 3, _ExprImage<T, C>>>
+  _ExprImage<T, C> Expr(::lopper::_Image<T>& image) {
+  return _ExprImage<T, C>(std::shared_ptr<::lopper::_Image<T>>(std::shared_ptr<::lopper::_Image<T>>(),
+                                                               dynamic_cast<::lopper::_Image<T>*>(&image)));
 }
 
 } // end namespace lopper
