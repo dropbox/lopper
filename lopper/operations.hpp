@@ -241,8 +241,13 @@ _OperationIf<int32_t>::eval<LOPPER_TARGET>(const Multiple<int32_t, LOPPER_TARGET
 
 } // end namespace internal
 
+template<typename T, typename E0>
+const SFINAE<std::is_same<T, typename E0::lopper_expr_type>::value, E0> Expr(const E0& exp0) {
+  return exp0;
+}
+
 template<typename T, typename E0, typename F = typename E0::lopper_expr_type>
-SFINAE<std::is_same<float, T>::value || std::is_same<int32_t, T>::value,
+SFINAE<(std::is_same<float, T>::value || std::is_same<int32_t, T>::value) && !std::is_same<T, F>::value,
        _ExprTypeConvert<T, E0>> Expr(const E0& exp0) {
   return _ExprTypeConvert<T, E0>(exp0);
 }
