@@ -118,11 +118,12 @@ _PixelLoader<LOPPER_TARGET>::load<int32_t, 3 >(const int32_t* ptr) {
 template<> inline constexpr size_t _PixelLoader<LOPPER_TARGET>::bytesPerOp<uint8_t, 1>() { return 16; }
 template<> inline constexpr size_t _PixelLoader<LOPPER_TARGET>::bytesPerOp<uint8_t, 2>() { return 16; }
 template<> inline constexpr size_t _PixelLoader<LOPPER_TARGET>::bytesPerOp<uint8_t, 3>() { return 16; }
+template<> inline constexpr size_t _PixelLoader<LOPPER_TARGET>::bytesPerOp<uint8_t, 4>() { return 16; }
 template<> inline Multiple<int32_t, LOPPER_TARGET> _PixelLoader<LOPPER_TARGET>::load<uint8_t>(const uint8_t* ptr) {
   return VEXPAND_BYTE<LOPPER_TARGET, 0>(VLOAD<LOPPER_TARGET>(ptr));
 }
 template<> inline MultipleIOTuple<uint8_t, 2, LOPPER_TARGET>
-_PixelLoader<LOPPER_TARGET>::load<uint8_t, 2 >(const uint8_t* ptr) {
+_PixelLoader<LOPPER_TARGET>::load<uint8_t, 2>(const uint8_t* ptr) {
   const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler0
     = VSET8x16<LOPPER_TARGET>(0, 255, 255, 255, 2, 255, 255, 255, 4, 255, 255, 255, 6, 255, 255, 255);
   const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler1
@@ -132,7 +133,7 @@ _PixelLoader<LOPPER_TARGET>::load<uint8_t, 2 >(const uint8_t* ptr) {
                          VSHUFFLE<LOPPER_TARGET>(in, _deshuffler1));
 }
 template<> inline MultipleIOTuple<uint8_t, 3, LOPPER_TARGET>
-_PixelLoader<LOPPER_TARGET>::load<uint8_t, 3 >(const uint8_t* ptr) {
+_PixelLoader<LOPPER_TARGET>::load<uint8_t, 3>(const uint8_t* ptr) {
   const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler0
     = VSET8x16<LOPPER_TARGET>(0, 255, 255, 255, 3, 255, 255, 255, 6, 255, 255, 255, 9, 255, 255, 255);
   const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler1
@@ -143,6 +144,16 @@ _PixelLoader<LOPPER_TARGET>::load<uint8_t, 3 >(const uint8_t* ptr) {
   return std::make_tuple(VSHUFFLE<LOPPER_TARGET>(in, _deshuffler0),
                          VSHUFFLE<LOPPER_TARGET>(in, _deshuffler1),
                          VSHUFFLE<LOPPER_TARGET>(in, _deshuffler2));
+}
+template<> inline MultipleIOTuple<uint8_t, 4, LOPPER_TARGET>
+_PixelLoader<LOPPER_TARGET>::load<uint8_t, 4>(const uint8_t* ptr) {
+  const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler
+    = VSET8x16<LOPPER_TARGET>(0, 128, 128, 128, 4, 128, 128, 128, 8, 128, 128, 128, 12, 128, 128, 128);
+  const auto in = VLOAD<LOPPER_TARGET>(ptr);
+  return std::make_tuple(VSHUFFLE<LOPPER_TARGET>(in, _deshuffler),
+                         VSHUFFLE<LOPPER_TARGET>(VSHIFTR<8>(in), _deshuffler),
+                         VSHUFFLE<LOPPER_TARGET>(VSHIFTR<16>(in), _deshuffler),
+                         VSHUFFLE<LOPPER_TARGET>(VSHIFTR<24>(in), _deshuffler));
 }
 
 // Specialization for float
@@ -486,7 +497,7 @@ template<size_t C, typename T, typename F = SFINAE<C == 1, _ExprImage1<T>>>
   return _ExprImage1<T>(std::shared_ptr<::lopper::_Image<T>>(std::shared_ptr<::lopper::_Image<T>>(),
                                                              dynamic_cast<::lopper::_Image<T>*>(&image)));
 }
-template<size_t C, typename T, typename F = SFINAE<C == 2 || C == 3, _ExprImage<T, C>>>
+template<size_t C, typename T, typename F = SFINAE<C == 2 || C == 3 || C == 4, _ExprImage<T, C>>>
   _ExprImage<T, C> Expr(::lopper::_Image<T>& image) {
   return _ExprImage<T, C>(std::shared_ptr<::lopper::_Image<T>>(std::shared_ptr<::lopper::_Image<T>>(),
                                                                dynamic_cast<::lopper::_Image<T>*>(&image)));

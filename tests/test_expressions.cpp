@@ -388,6 +388,36 @@ TYPED_TEST_P(LopperTypedTest, ThreeChannelTest) {
   }
 }
 
+TYPED_TEST_P(LopperTypedTest, FourChannelTest) {
+  Image<uint8_t> in(4, 100, 100);
+  for (int y = 0; y < in.getHeight(); y++) {
+    for (int x = 0; x < in.getWidth(); x++) {
+      in(x, y, 0) = 12;
+      in(x, y, 1) = 34;
+      in(x, y, 2) = 56;
+      in(x, y, 3) = 78;
+    }
+  }
+  Image<int32_t> out(1, 100, 100);
+  // Try computing R + G * B - A
+  ExprPrepareContext();
+  auto rgba = ExprCache(Expr<4>(in));
+  auto r = rgba.get<0>();
+  auto g = rgba.get<1>();
+  auto b = rgba.get<2>();
+  auto a = rgba.get<3>();
+  ExprEvalWithContextSIMD(TypeParam::value, Expr<1>(out) = r + (g * b) - a);
+  for (int y = 0; y < in.getHeight(); y++) {
+    for (int x = 0; x < in.getWidth(); x++) {
+      int32_t r = in(x, y, 0);
+      int32_t g = in(x, y, 1);
+      int32_t b = in(x, y, 2);
+      int32_t a = in(x, y, 3);
+      ASSERT_EQ(r + g * b - a, out(x, y, 0));
+    }
+  }
+}
+
 TYPED_TEST_P(LopperTypedTest, RerunTest) {
   Image<float> in(1, 100, 100);
   Image<float> out1(1, 100, 100);
@@ -477,6 +507,7 @@ REGISTER_TYPED_TEST_CASE_P(LopperTypedTest,
                            CacheTest,
                            TwoChannelTest,
                            ThreeChannelTest,
+                           FourChannelTest,
                            RerunTest,
                            RGBToHSVTest,
                            ScopeTest);
