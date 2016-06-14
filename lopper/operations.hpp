@@ -280,8 +280,8 @@ DECLARE_BINARY_KERNEL(_OperationLessThan, operator<);
 DECLARE_BINARY_KERNEL(_OperationEqual, operator==);
 DECLARE_BINARY_KERNEL(_OperationMin, ExprMin);
 DECLARE_BINARY_KERNEL(_OperationMax, ExprMax);
-DECLARE_BINARY_KERNEL(_OperationBitwiseAnd, ExprAnd);
-DECLARE_BINARY_KERNEL(_OperationBitwiseOr, ExprOr);
+DECLARE_BINARY_KERNEL(_OperationBitwiseAnd, operator&);
+DECLARE_BINARY_KERNEL(_OperationBitwiseOr, operator|);
 
 DECLARE_BINARY_KERNEL_WITH_CONST(_OperationAdd, operator+);
 DECLARE_BINARY_KERNEL_WITH_CONST(_OperationSubtract, operator-);
@@ -290,8 +290,8 @@ DECLARE_BINARY_KERNEL_WITH_CONST(_OperationLessThan, operator<);
 DECLARE_BINARY_KERNEL_WITH_CONST(_OperationEqual, operator==);
 DECLARE_BINARY_KERNEL_WITH_CONST(_OperationMin, ExprMin);
 DECLARE_BINARY_KERNEL_WITH_CONST(_OperationMax, ExprMax);
-DECLARE_BINARY_KERNEL_WITH_CONST(_OperationBitwiseAnd, ExprAnd);
-DECLARE_BINARY_KERNEL_WITH_CONST(_OperationBitwiseOr, ExprOr);
+DECLARE_BINARY_KERNEL_WITH_CONST(_OperationBitwiseAnd, operator&);
+DECLARE_BINARY_KERNEL_WITH_CONST(_OperationBitwiseOr, operator|);
 
 /* Provides a kernel that chains a given binary kernel, like the reduction operator */
 template<typename K> struct _ChainedOperation {
