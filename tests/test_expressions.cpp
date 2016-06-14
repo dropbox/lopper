@@ -303,6 +303,21 @@ TYPED_TEST_P(LopperTypedTest, MinimumMaximumTest) {
   }
 }
 
+TYPED_TEST_P(LopperTypedTest, BitwiseOperationsTest) {
+  Image<int32_t> in1(1, 100, 100);
+  Image<int32_t> in2(1, 100, 100);
+  Image<int32_t> out1(1, 100, 100);
+  Image<int32_t> out2(1, 100, 100);
+  ExprEvalSIMD(TypeParam::value, Expr<1>(out1) = Expr<1>(in1) & Expr<1>(in2));
+  ExprEvalSIMD(TypeParam::value, Expr<1>(out2) = Expr<1>(in1) | Expr<1>(in2));
+  for (int y = 0; y < in1.getHeight(); y++) {
+    for (int x = 0; x < in1.getWidth(); x++) {
+      ASSERT_EQ(in1(x, y) & in2(x, y), out1(x, y));
+      ASSERT_EQ(in1(x, y) | in2(x, y), out2(x, y));
+    }
+  }
+}
+
 TYPED_TEST_P(LopperTypedTest, CacheTest) {
   Image<float> in(1, 100, 100);
   Image<float> out(1, 100, 100);
@@ -457,6 +472,7 @@ REGISTER_TYPED_TEST_CASE_P(LopperTypedTest,
                            GradientTest,
                            ReindexTest,
                            MinimumMaximumTest,
+                           BitwiseOperationsTest,
                            ReindexOffsetTest,
                            CacheTest,
                            TwoChannelTest,
