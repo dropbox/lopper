@@ -9,7 +9,7 @@
 using namespace lopper;
 
 #ifndef LOPPER_NO_SIMD
-TEST(DbxImageTestVector, LittleEndianTest) {
+TEST(LopperTestVector, LittleEndianTest) {
   // Make sure we're in little Endian, as some of the routines assume this explicitly.
   // While the corresponding tests will fail, we'll have an explicit test here.
   auto v = VSET<LOPPER_TARGET>(4 | (5 << 8) | (6 << 16) | (7 << 24));
@@ -18,7 +18,7 @@ TEST(DbxImageTestVector, LittleEndianTest) {
   ASSERT_EQ(4, buffer_u8[0]); // Big-endian would give 7 here.
 }
 
-TEST(DbxImageTestVector, SetTest) {
+TEST(LopperTestVector, SetTest) {
   uint8_t buffer_u8[16] = {0};
   int32_t buffer_s32[4] = {0};
   // Try setting a vector from a literal.
@@ -36,7 +36,7 @@ TEST(DbxImageTestVector, SetTest) {
   }
 }
 
-TEST(DbxImageTestVector, ExponentiationTest) {
+TEST(LopperTestVector, ExponentiationTest) {
   // Test VLDEXP and VFREXP.
   std::vector<float> inputs = {-32.1f, 1.0f, 0.4f, 0.001f, 0.9f, 1.98f, 3.99f, 123.45f};
   for (auto& input : inputs) {
@@ -65,7 +65,7 @@ TEST(DbxImageTestVector, ExponentiationTest) {
   }
 }
 
-TEST(DbxImageTestVector, LoadTest) {
+TEST(LopperTestVector, LoadTest) {
   float buffer_in[4] = {1.5f, 2.5f, -3.9f, 100.1f};
   int32_t indices[4] = {1, 2, 3, 0};
   float buffer_out[4];
@@ -87,7 +87,7 @@ TEST(DbxImageTestVector, LoadTest) {
   }
 }
 
-TEST(DbxImageTestVector, LoadUInt8IntoInt32Test) {
+TEST(LopperTestVector, LoadUInt8IntoInt32Test) {
   uint8_t buffer_in[17] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
   uint8_t buffer_out[16];
   VSTORE(buffer_out, VLOAD<LOPPER_TARGET>(buffer_in));
@@ -113,7 +113,7 @@ TEST(DbxImageTestVector, LoadUInt8IntoInt32Test) {
     ASSERT_EQ(output[i], OP(VLOAD<SCALAR>(arg1+i)));    \
   }
 
-TEST(DbxImageTestVector, FloatingPointMath) {
+TEST(LopperTestVector, FloatingPointMath) {
   float op1[4] = {1.5f, 2.5f, -3.9f, 100.1f};
   float op2[4] = {12.5f, -2.5f, 33.9f, 0.13f};
   float output_sse[4];
@@ -153,7 +153,7 @@ TEST(DbxImageTestVector, FloatingPointMath) {
   ASSERT_EQ(fabs(op1[2]), output_sse[2]);
 }
 
-TEST(DbxImageTestVector, IntegerMath) {
+TEST(LopperTestVector, IntegerMath) {
   int32_t op1[4] = {123, 456, -324, 199};
   int32_t op2[4] = {348, -123, -234, -1000};
   int32_t output_sse[4];
@@ -189,7 +189,7 @@ TEST(DbxImageTestVector, IntegerMath) {
   ASSERT_EQ(-op1[2], output_sse[2]);
 }
 
-TEST(DbxImageTestVector, BitMath) {
+TEST(LopperTestVector, BitMath) {
   int32_t input[4] = {123, 456, -324, 199};
   int32_t output[4];
 
@@ -206,7 +206,7 @@ TEST(DbxImageTestVector, BitMath) {
   }
 }
 
-TEST(DbxImageTestVector, Conversion) {
+TEST(LopperTestVector, Conversion) {
   float buffer_fp[4] = {100.3f, -38.f, 10.501f, -38.49f};
   int32_t buffer_int[4];
 
@@ -229,7 +229,7 @@ TEST(DbxImageTestVector, Conversion) {
   ASSERT_NEAR(-38.f, buffer_fp[3], 1e-5);
 }
 
-TEST(DbxImageTestVector, ExpandCollapse) {
+TEST(LopperTestVector, ExpandCollapse) {
   int32_t input[4] = {0x12345678, -0x08765432, 0x00112233, 0x01020304};
   int32_t output[4][4];
   int32_t expanded[4];
@@ -266,7 +266,7 @@ TEST(DbxImageTestVector, ExpandCollapse) {
   }
 }
 
-TEST(DbxImageTestVector, Shuffle) {
+TEST(LopperTestVector, Shuffle) {
   uint8_t indices[16] = {1,0,255u,4,5,6,7,8,9,10,11,12,13,14,255u,0};
   uint8_t data[16] = {100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115};
   uint8_t output[16];
@@ -281,7 +281,7 @@ TEST(DbxImageTestVector, Shuffle) {
   }
 }
 
-TEST(DbxImageTestVector, Comparison) {
+TEST(LopperTestVector, Comparison) {
   int32_t v0[4] = {1, 2, 3, 4};
   int32_t v1[4] = {2, 1, 4, 4};
   float v2[4] = {1.f, 2.f, 3.f, 4.f};
@@ -317,7 +317,7 @@ TEST(DbxImageTestVector, Comparison) {
   }
 }
 
-TEST(DbxImageTestVector, Select) {
+TEST(LopperTestVector, Select) {
   int32_t selector[4] = {123, 0, -998, 1};
   int32_t lhs1[4] = {0x12345678, 0x21436587, 0x12191919, 0x21212121};
   int32_t rhs1[4] = {0x11111111, 0x22222222, 0x01234567, 0x13131313};
