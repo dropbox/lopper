@@ -284,8 +284,8 @@ TYPED_TEST_P(LopperTypedTest, MinimumMaximumTest) {
   Image<uint8_t> out1(1, 100, 100);
   Image<uint8_t> out2(1, 100, 100);
   // Test ExprMin and ExprMax
-  ExprEval(Expr<1>(out1) = ExprMin(Expr<1>(in1), Expr<1>(in2)));
-  ExprEval(Expr<1>(out2) = ExprMax(Expr<1>(in1), Expr<1>(in2)));
+  ExprEvalSIMD(TypeParam::value, Expr<1>(out1) = ExprMin(Expr<1>(in1), Expr<1>(in2)));
+  ExprEvalSIMD(TypeParam::value, Expr<1>(out2) = ExprMax(Expr<1>(in1), Expr<1>(in2)));
   for (int y = 0; y < in1.getHeight(); y++) {
     for (int x = 0; x < in1.getWidth(); x++) {
       ASSERT_EQ(std::min(in1(x, y), in2(x, y)), out1(x, y));
@@ -293,8 +293,8 @@ TYPED_TEST_P(LopperTypedTest, MinimumMaximumTest) {
     }
   }
   // Test ExprMin and ExprMax chaining
-  ExprEval(Expr<1>(out1) = ExprMin(Expr<1>(in1), Expr<1>(in2), Expr<1>(in3)));
-  ExprEval(Expr<1>(out2) = ExprMax(Expr<1>(in1), Expr<1>(in2), Expr<1>(in3)));
+  ExprEvalSIMD(TypeParam::value, Expr<1>(out1) = ExprMin(Expr<1>(in1), Expr<1>(in2), Expr<1>(in3)));
+  ExprEvalSIMD(TypeParam::value, Expr<1>(out2) = ExprMax(Expr<1>(in1), Expr<1>(in2), Expr<1>(in3)));
   for (int y = 0; y < in1.getHeight(); y++) {
     for (int x = 0; x < in1.getWidth(); x++) {
       ASSERT_EQ(std::min(std::min(in1(x, y), in2(x, y)), in3(x, y)), out1(x, y));
@@ -511,7 +511,7 @@ TYPED_TEST_P(LopperTypedTest, RGBToHSVTest) {
   auto h_fp = ExprCache(ExprIf(delta == 0, Expr<float>(0.f), (q + offset) * (256.f / 6.f)));
   auto s = ExprIf(cmax < Expr<1>(), Expr<0>(), Expr<int32_t>(Expr<float>(delta * 255) / Expr<float>(cmax) + 0.5f));
   auto h = Expr<int32_t>(ExprIf(h_fp < -0.5f, h_fp + 256.5f, h_fp + 0.5f));
-  ExprEvalWithContext(Expr<3>(out) = std::make_tuple(h, s, cmax));
+  ExprEvalWithContextSIMD(TypeParam::value, Expr<3>(out) = std::make_tuple(h, s, cmax));
   // #ff0000 should map to (0, 255, 255)
   ASSERT_EQ(0u, out(0, 0, 0));
   ASSERT_EQ(255u, out(0, 0, 1));
