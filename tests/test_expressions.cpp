@@ -369,21 +369,87 @@ TYPED_TEST_P(LopperTypedTest, ThreeChannelTest) {
       in(x, y, 2) = 222;
     }
   }
-  Image<int32_t> out(1, 100, 100);
-  // Try computing R + G * B
-  ExprPrepareContext();
-  auto rgb = ExprCache(Expr<3>(in));
-  auto r = rgb.get<0>();
-  auto g = rgb.get<1>();
-  auto b = rgb.get<2>();
-  auto tmp = ExprCache(r + (g * b));
-  ExprEvalWithContextSIMD(TypeParam::value, Expr<1>(out) = tmp + tmp);
+  { // Try computing (R + G * B) * 2
+    Image<int32_t> out(1, 100, 100);
+    ExprPrepareContext();
+    auto rgb = ExprCache(Expr<3>(in));
+    auto r = rgb.get<0>();
+    auto g = rgb.get<1>();
+    auto b = rgb.get<2>();
+    auto tmp = ExprCache(r + (g * b));
+    ExprEvalWithContextSIMD(TypeParam::value, Expr<1>(out) = tmp + tmp);
+    for (int y = 0; y < in.getHeight(); y++) {
+      for (int x = 0; x < in.getWidth(); x++) {
+        int32_t r = in(x, y, 0);
+        int32_t g = in(x, y, 1);
+        int32_t b = in(x, y, 2);
+        ASSERT_EQ((r + g * b) * 2, out(x, y, 0));
+      }
+    }
+  }
+  { // Try shuffling the channels
+    Image<uint8_t> out(3, 100, 100);
+    ExprPrepareContext();
+    auto rgb = ExprCache(Expr<3>(in));
+    auto r = rgb.get<0>();
+    auto g = rgb.get<1>();
+    auto b = rgb.get<2>();
+    ExprEvalWithContextSIMD(TypeParam::value, Expr<3>(out) = std::make_tuple(g, b, r));
+    for (int y = 0; y < in.getHeight(); y++) {
+      for (int x = 0; x < in.getWidth(); x++) {
+        ASSERT_EQ(in(x, y, 1), out(x, y, 0));
+        ASSERT_EQ(in(x, y, 2), out(x, y, 1));
+        ASSERT_EQ(in(x, y, 0), out(x, y, 2));
+      }
+    }
+  }
+}
+
+TYPED_TEST_P(LopperTypedTest, FourChannelTest) {
+  Image<uint8_t> in(4, 100, 100);
   for (int y = 0; y < in.getHeight(); y++) {
     for (int x = 0; x < in.getWidth(); x++) {
-      int32_t r = in(x, y, 0);
-      int32_t g = in(x, y, 1);
-      int32_t b = in(x, y, 2);
-      ASSERT_EQ((r + g * b) * 2, out(x, y, 0));
+      in(x, y, 0) = 212;
+      in(x, y, 1) = 234;
+      in(x, y, 2) = 219;
+      in(x, y, 3) = 178;
+    }
+  }
+  { // Try computing R + G * B - A
+    Image<int32_t> out(1, 100, 100);
+    ExprPrepareContext();
+    auto rgba = ExprCache(Expr<4>(in));
+    auto r = rgba.get<0>();
+    auto g = rgba.get<1>();
+    auto b = rgba.get<2>();
+    auto a = rgba.get<3>();
+    ExprEvalWithContextSIMD(TypeParam::value, Expr<1>(out) = r + (g * b) - a);
+    for (int y = 0; y < in.getHeight(); y++) {
+      for (int x = 0; x < in.getWidth(); x++) {
+        int32_t r = in(x, y, 0);
+        int32_t g = in(x, y, 1);
+        int32_t b = in(x, y, 2);
+        int32_t a = in(x, y, 3);
+        ASSERT_EQ(r + g * b - a, out(x, y, 0));
+      }
+    }
+  }
+  { // Try shuffling the channels
+    Image<uint8_t> out(4, 100, 100);
+    ExprPrepareContext();
+    auto rgba = ExprCache(Expr<4>(in));
+    auto r = rgba.get<0>();
+    auto g = rgba.get<1>();
+    auto b = rgba.get<2>();
+    auto a = rgba.get<3>();
+    ExprEvalWithContextSIMD(TypeParam::value, Expr<4>(out) = std::make_tuple(g, r, a, b));
+    for (int y = 0; y < in.getHeight(); y++) {
+      for (int x = 0; x < in.getWidth(); x++) {
+        ASSERT_EQ(in(x, y, 1), out(x, y, 0));
+        ASSERT_EQ(in(x, y, 0), out(x, y, 1));
+        ASSERT_EQ(in(x, y, 3), out(x, y, 2));
+        ASSERT_EQ(in(x, y, 2), out(x, y, 3));
+      }
     }
   }
 }
@@ -477,6 +543,7 @@ REGISTER_TYPED_TEST_CASE_P(LopperTypedTest,
                            CacheTest,
                            TwoChannelTest,
                            ThreeChannelTest,
+                           FourChannelTest,
                            RerunTest,
                            RGBToHSVTest,
                            ScopeTest);

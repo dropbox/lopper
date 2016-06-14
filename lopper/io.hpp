@@ -118,11 +118,12 @@ _PixelLoader<LOPPER_TARGET>::load<int32_t, 3 >(const int32_t* ptr) {
 template<> inline constexpr size_t _PixelLoader<LOPPER_TARGET>::bytesPerOp<uint8_t, 1>() { return 16; }
 template<> inline constexpr size_t _PixelLoader<LOPPER_TARGET>::bytesPerOp<uint8_t, 2>() { return 16; }
 template<> inline constexpr size_t _PixelLoader<LOPPER_TARGET>::bytesPerOp<uint8_t, 3>() { return 16; }
+template<> inline constexpr size_t _PixelLoader<LOPPER_TARGET>::bytesPerOp<uint8_t, 4>() { return 16; }
 template<> inline Multiple<int32_t, LOPPER_TARGET> _PixelLoader<LOPPER_TARGET>::load<uint8_t>(const uint8_t* ptr) {
   return VEXPAND_BYTE<LOPPER_TARGET, 0>(VLOAD<LOPPER_TARGET>(ptr));
 }
 template<> inline MultipleIOTuple<uint8_t, 2, LOPPER_TARGET>
-_PixelLoader<LOPPER_TARGET>::load<uint8_t, 2 >(const uint8_t* ptr) {
+_PixelLoader<LOPPER_TARGET>::load<uint8_t, 2>(const uint8_t* ptr) {
   const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler0
     = VSET8x16<LOPPER_TARGET>(0, 255, 255, 255, 2, 255, 255, 255, 4, 255, 255, 255, 6, 255, 255, 255);
   const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler1
@@ -132,7 +133,7 @@ _PixelLoader<LOPPER_TARGET>::load<uint8_t, 2 >(const uint8_t* ptr) {
                          VSHUFFLE<LOPPER_TARGET>(in, _deshuffler1));
 }
 template<> inline MultipleIOTuple<uint8_t, 3, LOPPER_TARGET>
-_PixelLoader<LOPPER_TARGET>::load<uint8_t, 3 >(const uint8_t* ptr) {
+_PixelLoader<LOPPER_TARGET>::load<uint8_t, 3>(const uint8_t* ptr) {
   const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler0
     = VSET8x16<LOPPER_TARGET>(0, 255, 255, 255, 3, 255, 255, 255, 6, 255, 255, 255, 9, 255, 255, 255);
   const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler1
@@ -143,6 +144,16 @@ _PixelLoader<LOPPER_TARGET>::load<uint8_t, 3 >(const uint8_t* ptr) {
   return std::make_tuple(VSHUFFLE<LOPPER_TARGET>(in, _deshuffler0),
                          VSHUFFLE<LOPPER_TARGET>(in, _deshuffler1),
                          VSHUFFLE<LOPPER_TARGET>(in, _deshuffler2));
+}
+template<> inline MultipleIOTuple<uint8_t, 4, LOPPER_TARGET>
+_PixelLoader<LOPPER_TARGET>::load<uint8_t, 4>(const uint8_t* ptr) {
+  const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler
+    = VSET8x16<LOPPER_TARGET>(0, 128, 128, 128, 4, 128, 128, 128, 8, 128, 128, 128, 12, 128, 128, 128);
+  const auto in = VLOAD<LOPPER_TARGET>(ptr);
+  return std::make_tuple(VSHUFFLE<LOPPER_TARGET>(in, _deshuffler),
+                         VSHUFFLE<LOPPER_TARGET>(VSHIFTR<8>(in), _deshuffler),
+                         VSHUFFLE<LOPPER_TARGET>(VSHIFTR<16>(in), _deshuffler),
+                         VSHUFFLE<LOPPER_TARGET>(VSHIFTR<24>(in), _deshuffler));
 }
 
 // Specialization for float
@@ -207,6 +218,16 @@ template<> struct _PixelStorer<SCALAR> {
     ptr[1] = (T)val1;
     ptr[2] = (T)val2;
   }
+  template<typename T> static void store4(T* ptr,
+                                          const MultipleIO<T, SCALAR>& val0,
+                                          const MultipleIO<T, SCALAR>& val1,
+                                          const MultipleIO<T, SCALAR>& val2,
+                                          const MultipleIO<T, SCALAR>& val3) {
+    ptr[0] = (T)val0;
+    ptr[1] = (T)val1;
+    ptr[2] = (T)val2;
+    ptr[3] = (T)val3;
+  }
 };
 
 #ifndef LOPPER_NO_SIMD
@@ -223,6 +244,11 @@ template<> struct _PixelStorer<LOPPER_TARGET> {
                                           const MultipleIO<T, LOPPER_TARGET>& val0,
                                           const MultipleIO<T, LOPPER_TARGET>& val1,
                                           const MultipleIO<T, LOPPER_TARGET>& val2);
+  template<typename T> static void store4(T* ptr,
+                                          const MultipleIO<T, LOPPER_TARGET>& val0,
+                                          const MultipleIO<T, LOPPER_TARGET>& val1,
+                                          const MultipleIO<T, LOPPER_TARGET>& val2,
+                                          const MultipleIO<T, LOPPER_TARGET>& val3);
 };
 
 template<> inline void _PixelStorer<LOPPER_TARGET>::store<uint8_t>(uint8_t* ptr,
@@ -245,6 +271,19 @@ template<> inline void _PixelStorer<LOPPER_TARGET>::store3<uint8_t>(uint8_t* ptr
   VSTORE(ptr, VBITWISE_OR(VBITWISE_OR(VSHUFFLE<LOPPER_TARGET>(val0, _deshuffler0),
                                       VSHUFFLE<LOPPER_TARGET>(val1, _deshuffler1)),
                           VSHUFFLE<LOPPER_TARGET>(val2, _deshuffler2)));
+}
+
+template<> inline void _PixelStorer<LOPPER_TARGET>::store4<uint8_t>(uint8_t* ptr,
+                                                                    const Multiple<int32_t, LOPPER_TARGET>& val0,
+                                                                    const Multiple<int32_t, LOPPER_TARGET>& val1,
+                                                                    const Multiple<int32_t, LOPPER_TARGET>& val2,
+                                                                    const Multiple<int32_t, LOPPER_TARGET>& val3) {
+  const auto mask = VSET<LOPPER_TARGET>(255);
+  const auto val0_masked = VBITWISE_AND(val0, mask);
+  const auto val1_masked = VSHIFTL<8>(VBITWISE_AND(val1, mask));
+  const auto val2_masked = VSHIFTL<16>(VBITWISE_AND(val2, mask));
+  const auto val3_masked = VSHIFTL<24>(VBITWISE_AND(val3, mask));
+  VSTORE(ptr, VBITWISE_OR(VBITWISE_OR(val0_masked, val1_masked), VBITWISE_OR(val2_masked, val3_masked)));
 }
 
 template<> inline void _PixelStorer<LOPPER_TARGET>::store3<int32_t>(int32_t* ptr,
@@ -318,27 +357,37 @@ private:
   mutable T* _ptr;
 };
 
-template<typename T, typename E0, typename E1, typename E2> struct _ExprSave3 : public _ExprSaveBase<T, E0, E1, E2> {
-  _ExprSave3(std::shared_ptr<_Image<T>>& image, const E0& e0, const E1& e1, const E2& e2)
-    : _ExprSaveBase<T, E0, E1, E2>(image, e0, e1, e2) {}
+template<typename T, typename E, typename ... Es> struct _ExprSaveN : public _ExprSaveBase<T, E, Es...> {
+  _ExprSaveN(std::shared_ptr<_Image<T>>& image, const E& e0, const Es& ... es)
+    : _ExprSaveBase<T, E, Es...>(image, e0, es...) {}
 
   virtual size_t getSIMDClearance() const {
-    const size_t bytes_written = _PixelStorer<LOPPER_TARGET>::template bytesPerOp<T, 3>();
-    const size_t bytes_per_pixel = sizeof(T) * 3;
+    const size_t bytes_written = _PixelStorer<LOPPER_TARGET>::template bytesPerOp<T, 1 + sizeof...(Es)>();
+    const size_t bytes_per_pixel = sizeof(T) * (1 + sizeof...(Es));
     return (bytes_written + (bytes_per_pixel - 1)) / bytes_per_pixel;
   }
 
   void prepareRow(const int y) const {
     _ptr = this->_image->getRowPointer(y);
-    this->TernaryExpr<typename E0::type, E0, E1, E2>::prepareRow(y);
+    this->_NaryExpr<1 + sizeof...(Es)>::template type<void, E, Es...>::prepareRow(y);
   }
 
   template<InstructionSet S, size_t U, typename ... Cxt> inline
-  Multiple<typename E0::type, S> eval(const int x, const Cxt& ... args) const {
+  SFINAE<sizeof...(Es) == 2u, Multiple<typename E::type, S>> eval(const int x, const Cxt& ... args) const {
     const auto v0 = this->_e0.template eval<S, U>(x, args...);
     const auto v1 = this->_e1.template eval<S, U>(x, args...);
     const auto v2 = this->_e2.template eval<S, U>(x, args...);
     _PixelStorer<S>::template store3<T>(_ptr + x * 3, v0, v1, v2);
+    return v0;
+  }
+
+  template<InstructionSet S, size_t U, typename ... Cxt> inline
+  SFINAE<sizeof...(Es) == 3u, Multiple<typename E::type, S>> eval(const int x, const Cxt& ... args) const {
+    const auto v0 = this->_e0.template eval<S, U>(x, args...);
+    const auto v1 = this->_e1.template eval<S, U>(x, args...);
+    const auto v2 = this->_e2.template eval<S, U>(x, args...);
+    const auto v3 = this->_e3.template eval<S, U>(x, args...);
+    _PixelStorer<S>::template store4<T>(_ptr + x * 4, v0, v1, v2, v3);
     return v0;
   }
 private:
@@ -468,8 +517,13 @@ template<typename T, size_t C> struct _ExprImage : public NullaryExpr<typename I
   }
 
   template<typename ... E> auto operator=(const std::tuple<E...>& t) ->
-    SFINAE<(sizeof...(E) == C && sizeof...(E) == 3), _ExprSave3<T, E...>> {
-    return _ExprSave3<T, E...>(_image, std::get<0>(t), std::get<1>(t), std::get<2>(t));
+    SFINAE<(sizeof...(E) == C && sizeof...(E) == 3), _ExprSaveN<T, E...>> {
+    return _ExprSaveN<T, E...>(_image, std::get<0>(t), std::get<1>(t), std::get<2>(t));
+  }
+
+  template<typename ... E> auto operator=(const std::tuple<E...>& t) ->
+    SFINAE<(sizeof...(E) == C && sizeof...(E) == 4), _ExprSaveN<T, E...>> {
+    return _ExprSaveN<T, E...>(_image, std::get<0>(t), std::get<1>(t), std::get<2>(t), std::get<3>(t));
   }
 
 private:
@@ -486,7 +540,7 @@ template<size_t C, typename T, typename F = SFINAE<C == 1, _ExprImage1<T>>>
   return _ExprImage1<T>(std::shared_ptr<::lopper::_Image<T>>(std::shared_ptr<::lopper::_Image<T>>(),
                                                              dynamic_cast<::lopper::_Image<T>*>(&image)));
 }
-template<size_t C, typename T, typename F = SFINAE<C == 2 || C == 3, _ExprImage<T, C>>>
+template<size_t C, typename T, typename F = SFINAE<C == 2 || C == 3 || C == 4, _ExprImage<T, C>>>
   _ExprImage<T, C> Expr(::lopper::_Image<T>& image) {
   return _ExprImage<T, C>(std::shared_ptr<::lopper::_Image<T>>(std::shared_ptr<::lopper::_Image<T>>(),
                                                                dynamic_cast<::lopper::_Image<T>*>(&image)));
