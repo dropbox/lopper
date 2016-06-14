@@ -17,7 +17,7 @@
 // During evaluation, prepareRow(y) will be called before processing each row of index y,
 // and then for each pixel of each row, eval(...) will be called.
 //
-// Expressions should inherit from NullaryExpr, UnaryExpr, BinaryExpr or TernaryExpr.
+// Expressions should inherit from NullaryExpr, UnaryExpr, BinaryExpr, TernaryExpr or QuaternaryExpr.
 // They provide the wiring for dispatching the above methods to subexpressions. It is up to the programmer
 // to provide a kernel that combines the return values of eval(...) from the subexpressions.
 // If a kernel is not provided, eval(...) should be implemented separately.
@@ -118,8 +118,40 @@ template<typename T, typename E0, typename E1, typename E2, typename K = void> s
   }
 };
 
+// Represents a ternary expression that evaluates into Multiple<T>.
+template<typename T, typename E0, typename E1, typename E2, typename E3, typename K = void> struct QuaternaryExpr : public _Expr<T> {
+  const E0 _e0;
+  const E1 _e1;
+  const E2 _e2;
+  const E3 _e3;
+  QuaternaryExpr(const E0& e0, const E1& e1, const E2& e2, const E3& e3) : _e0(e0), _e1(e1), _e2(e2), _e3(e3) {}
+  template<typename F> void analyze(F& func) const {
+    func(_e0);
+    func(_e1);
+    func(_e2);
+    func(_e3);
+    _e0.analyze(func);
+    _e1.analyze(func);
+    _e2.analyze(func);
+    _e3.analyze(func);
+  }
+  void prepareRow(const int y) const {
+    _e0.prepareRow(y);
+    _e1.prepareRow(y);
+    _e2.prepareRow(y);
+    _e3.prepareRow(y);
+  }
+  template<InstructionSet S, size_t U, typename ... Cxt> Multiple<T, S> inline eval(const int x, const Cxt& ... args) const {
+    const auto v0 = _e0.template eval<S, U>(x, args...);
+    const auto v1 = _e1.template eval<S, U>(x, args...);
+    const auto v2 = _e2.template eval<S, U>(x, args...);
+    const auto v3 = _e3.template eval<S, U>(x, args...);
+    return K::template eval<S>(v0, v1, v2, v3);
+  }
+};
+
 // Machinery to figure out the base expression type automatically, for non-nullary expressions.
-// Preferably UnaryExpr, BinaryExpr, TernaryExpr should be used explicitly, but for some expressions
+// Preferably UnaryExpr, BinaryExpr, TernaryExpr, QuaternaryExpr should be used explicitly, but for some expressions
 // that are variadic, NaryExpr<E0, ...> can be used.
 template<size_t N> struct _NaryExpr {};
 template<> struct _NaryExpr<1> {
@@ -131,6 +163,10 @@ template<> struct _NaryExpr<2> {
 template<> struct _NaryExpr<3> {
   template<typename K, typename ... E> using type = TernaryExpr<typename NthTypeOf<0, E...>::type, E..., K>;
 };
+template<> struct _NaryExpr<4> {
+  template<typename K, typename ... E> using type = QuaternaryExpr<typename NthTypeOf<0, E...>::type, E..., K>;
+};
+
 template<typename ... E> using NaryExpr =
   typename _NaryExpr<sizeof...(E)>::template type<void, E...>;
 template<typename K, typename ... E> using NaryExprWithKernel =
