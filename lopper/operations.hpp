@@ -82,6 +82,20 @@ template<typename T> struct _OperationDivide { // Caller should take care to not
   }
 };
 
+template<typename T, size_t bits> struct _OperationShiftLeft {
+  typedef int32_t type;
+  template<InstructionSet S> static Multiple<int32_t, S> eval(const Multiple<int32_t, S>& in0) {
+    return VSHIFTL<bits>(in0);
+  }
+};
+
+template<typename T, size_t bits> struct _OperationShiftRight {
+  typedef int32_t type;
+  template<InstructionSet S> static Multiple<int32_t, S> eval(const Multiple<int32_t, S>& in0) {
+    return VSHIFTR<bits>(in0);
+  }
+};
+
 template<typename T> struct _OperationLessThan {
   typedef int32_t type;
   template<InstructionSet S> static Multiple<int32_t, S> eval(const Multiple<T, S>& in0,
@@ -254,6 +268,14 @@ SFINAE<(std::is_same<float, T>::value || std::is_same<int32_t, T>::value) && !st
 
 template<typename E0> _ExprLambda1<typename E0::type, E0, _OperationAbs<typename E0::type>> ExprAbs(const E0& exp0) {
   return _ExprLambda1<typename E0::type, E0, _OperationAbs<typename E0::type>>(exp0);
+}
+
+template<size_t bits, typename E0> _ExprLambda1<typename E0::type, E0, _OperationShiftLeft<typename E0::type, bits>> ExprShiftLeft(const E0& exp0) {
+  return _ExprLambda1<typename E0::type, E0, _OperationShiftLeft<typename E0::type, bits>>(exp0);
+}
+
+template<size_t bits, typename E0> _ExprLambda1<typename E0::type, E0, _OperationShiftRight<typename E0::type, bits>> ExprShiftRight(const E0& exp0) {
+  return _ExprLambda1<typename E0::type, E0, _OperationShiftRight<typename E0::type, bits>>(exp0);
 }
 
 #define DECLARE_BINARY_KERNEL(KERNEL, NAME) template<typename E0, typename E1> \

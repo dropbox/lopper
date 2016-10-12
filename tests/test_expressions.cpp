@@ -32,15 +32,6 @@ private:
   std::vector<T> m_data;
 };
 
-/* A helper to randomize test images. */
-template<typename T> void randomize(Image<T>& image) {
-  for (int y = 0; y < image.getHeight(); y++) {
-    for (int x = 0; x < image.getWidth() * image.getChannels(); x++) {
-      image(x, y) = (rand() % 2 == 0) ? T(0) : T(1);
-    }
-  }
-}
-
 /* A helper to check image equality exactly. */
 template<typename T> bool areImagesEqual(const Image<T>& image0, const Image<T>& image1) {
   if (image0.getWidth() != image1.getWidth()) return false;
@@ -318,6 +309,27 @@ TYPED_TEST_P(LopperTypedTest, BitwiseOperationsTest) {
   }
 }
 
+TYPED_TEST_P(LopperTypedTest, ShiftTest) {
+  Image<int32_t> in1(1, 100, 100);
+  for (int y = 0; y < in1.getHeight(); y++) {
+    for (int x = 0; x < in1.getWidth(); x++) {
+      for (int c = 0; c < in1.getChannelCount(); c++) {
+        in1(x, y, c) = rand() & 0xff;
+      }
+    }
+  }
+  Image<int32_t> out1(1, 100, 100);
+  Image<int32_t> out2(1, 100, 100);
+  ExprEvalSIMD(TypeParam::value, Expr<1>(out1) = ExprShiftRight<2>(Expr<1>(in1)));
+  ExprEvalSIMD(TypeParam::value, Expr<1>(out2) = ExprShiftLeft<2>(Expr<1>(in1)));
+  for (int y = 0; y < in1.getHeight(); y++) {
+    for (int x = 0; x < in1.getWidth(); x++) {
+      ASSERT_EQ(in1(x, y) >> 2, out1(x, y));
+      ASSERT_EQ(in1(x, y) << 2, out2(x, y));
+    }
+  }
+}
+
 TYPED_TEST_P(LopperTypedTest, CacheTest) {
   Image<float> in(1, 100, 100);
   Image<float> out(1, 100, 100);
@@ -539,6 +551,7 @@ REGISTER_TYPED_TEST_CASE_P(LopperTypedTest,
                            ReindexTest,
                            MinimumMaximumTest,
                            BitwiseOperationsTest,
+                           ShiftTest,
                            ReindexOffsetTest,
                            CacheTest,
                            TwoChannelTest,
