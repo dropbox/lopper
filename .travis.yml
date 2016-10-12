@@ -9,7 +9,7 @@ os:
 before_install:
   - sudo apt-get update
   - sudo apt-get install libgtest-dev
-  - "cd /usr/src/gtest && sudo cmake . && sudo cmake --build . && sudo mv libg* /usr/local/lib/ ; cd -"
+  - "cd /usr/src/gtest && CC=gcc CXX=g++ sudo cmake . && sudo cmake --build . && sudo mv libg* /usr/local/lib/ ; cd -"
   - echo $LANG
   - echo $CXX
 script: "cd $TRAVIS_BUILD_DIR; mkdir cmake_build; cd cmake_build; cmake ..; make run_test"
