@@ -233,20 +233,20 @@ TEST(LopperTestVector, ExpandCollapse) {
   int32_t input[4] = {0x12345678, -0x08765432, 0x00112233, 0x01020304};
   int32_t output[4][4];
   int32_t expanded[4];
-  expanded[0] = VEXPAND_BYTE<SCALAR, 0>(input[0]);
-  expanded[1] = VEXPAND_BYTE<SCALAR, 1>(input[0]);
-  expanded[2] = VEXPAND_BYTE<SCALAR, 2>(input[0]);
-  expanded[3] = VEXPAND_BYTE<SCALAR, 3>(input[0]);
+  expanded[0] = VEXPAND_QTR<SCALAR, 0>(input[0]);
+  expanded[1] = VEXPAND_QTR<SCALAR, 1>(input[0]);
+  expanded[2] = VEXPAND_QTR<SCALAR, 2>(input[0]);
+  expanded[3] = VEXPAND_QTR<SCALAR, 3>(input[0]);
   ASSERT_EQ(0x78, expanded[0]);
   ASSERT_EQ(0x56, expanded[1]);
   ASSERT_EQ(0x34, expanded[2]);
   ASSERT_EQ(0x12, expanded[3]);
 
   auto tmp = VLOAD<LOPPER_TARGET>(input);
-  VSTORE(output[0], VEXPAND_BYTE<LOPPER_TARGET, 0>(tmp));
-  VSTORE(output[1], VEXPAND_BYTE<LOPPER_TARGET, 1>(tmp));
-  VSTORE(output[2], VEXPAND_BYTE<LOPPER_TARGET, 2>(tmp));
-  VSTORE(output[3], VEXPAND_BYTE<LOPPER_TARGET, 3>(tmp));
+  VSTORE(output[0], VEXPAND_QTR<LOPPER_TARGET, 0>(tmp));
+  VSTORE(output[1], VEXPAND_QTR<LOPPER_TARGET, 1>(tmp));
+  VSTORE(output[2], VEXPAND_QTR<LOPPER_TARGET, 2>(tmp));
+  VSTORE(output[3], VEXPAND_QTR<LOPPER_TARGET, 3>(tmp));
   ASSERT_EQ(0x78, output[0][0]);
   ASSERT_EQ(0x56, output[0][1]);
   ASSERT_EQ(0x34, output[0][2]);

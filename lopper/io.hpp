@@ -120,7 +120,7 @@ template<> inline constexpr size_t _PixelLoader<LOPPER_TARGET>::bytesPerOp<uint8
 template<> inline constexpr size_t _PixelLoader<LOPPER_TARGET>::bytesPerOp<uint8_t, 3>() { return 16; }
 template<> inline constexpr size_t _PixelLoader<LOPPER_TARGET>::bytesPerOp<uint8_t, 4>() { return 16; }
 template<> inline Multiple<int32_t, LOPPER_TARGET> _PixelLoader<LOPPER_TARGET>::load<uint8_t>(const uint8_t* ptr) {
-  return VEXPAND_BYTE<LOPPER_TARGET, 0>(VLOAD<LOPPER_TARGET>(ptr));
+  return VEXPAND_QTR<LOPPER_TARGET, 0>(VLOAD<LOPPER_TARGET>(ptr));
 }
 template<> inline MultipleIOTuple<uint8_t, 2, LOPPER_TARGET>
 _PixelLoader<LOPPER_TARGET>::load<uint8_t, 2>(const uint8_t* ptr) {

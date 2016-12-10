@@ -46,7 +46,11 @@ namespace lopper {
                                              uint8_t op_m, uint8_t op_n, uint8_t op_o, uint8_t op_p);
   template<InstructionSet S> SFLOAT VTO_FLOAT(SINT32 op1);
   template<InstructionSet S> SINT32 VTO_INT32(SFLOAT op1);
-  template<InstructionSet S, size_t I> SINT32 VEXPAND_BYTE(SINT32 op);
+  template<InstructionSet S, size_t I> typename std::enable_if<I < 4u, SINT32>::type VEXPAND_QTR(SINT32 op);
+  template<InstructionSet S, size_t I> typename std::enable_if<InstructionSetTrait<S>::num_lanes == 4u &&
+                                                               I < 4u, SINT32>::type VEXPAND_BYTE(SINT32 op) {
+    return VEXPAND_QTR<S, I>(op);
+  }
   template<InstructionSet S> SINT32 VCOLLAPSE_TO_BYTES(SINT32 op1, SINT32 op2, SINT32 op3, SINT32 op4);
   template<typename T> T VBITWISE_OR(T op1, T op2);
   template<typename T> T VBITWISE_AND(T op1, T op2);
@@ -105,10 +109,10 @@ namespace lopper {
 
   template<> inline float VTO_FLOAT<SCALAR>(int32_t op1) { return (float)op1; }
   template<> inline int32_t VTO_INT32<SCALAR>(float op1) { return (int32_t)op1; }
-  template<> inline int32_t VEXPAND_BYTE<SCALAR, 0>(int32_t op1) { return (op1 >> (0 * 8)) & 0x0ff; }
-  template<> inline int32_t VEXPAND_BYTE<SCALAR, 1>(int32_t op1) { return (op1 >> (1 * 8)) & 0x0ff; }
-  template<> inline int32_t VEXPAND_BYTE<SCALAR, 2>(int32_t op1) { return (op1 >> (2 * 8)) & 0x0ff; }
-  template<> inline int32_t VEXPAND_BYTE<SCALAR, 3>(int32_t op1) { return (op1 >> (3 * 8)) & 0x0ff; }
+  template<> inline int32_t VEXPAND_QTR<SCALAR, 0>(int32_t op1) { return (op1 >> (0 * 8)) & 0x0ff; }
+  template<> inline int32_t VEXPAND_QTR<SCALAR, 1>(int32_t op1) { return (op1 >> (1 * 8)) & 0x0ff; }
+  template<> inline int32_t VEXPAND_QTR<SCALAR, 2>(int32_t op1) { return (op1 >> (2 * 8)) & 0x0ff; }
+  template<> inline int32_t VEXPAND_QTR<SCALAR, 3>(int32_t op1) { return (op1 >> (3 * 8)) & 0x0ff; }
   template<> inline int32_t VCOLLAPSE_TO_BYTES<SCALAR>(int32_t op1, int32_t op2, int32_t op3, int32_t op4) {
     uint32_t ret = VMIN(VMAX(op1, 0), 255) |
       (VMIN(VMAX(op2, 0), 255) << 8) |
@@ -204,10 +208,10 @@ namespace lopper {
   }
   template<> inline __m128 VTO_FLOAT<SSE>(__m128i op1) { return _mm_cvtepi32_ps(op1); }
   template<> inline __m128i VTO_INT32<SSE>(__m128 op1) { return _mm_cvttps_epi32(op1); }
-  template<> inline __m128i VEXPAND_BYTE<SSE, 0>(__m128i op) { return _mm_cvtepu8_epi32(op); }
-  template<> inline __m128i VEXPAND_BYTE<SSE, 1>(__m128i op) { return _mm_cvtepu8_epi32(_mm_srli_si128(op, 4)); }
-  template<> inline __m128i VEXPAND_BYTE<SSE, 2>(__m128i op) { return _mm_cvtepu8_epi32(_mm_srli_si128(op, 8)); }
-  template<> inline __m128i VEXPAND_BYTE<SSE, 3>(__m128i op) { return _mm_cvtepu8_epi32(_mm_srli_si128(op, 12)); }
+  template<> inline __m128i VEXPAND_QTR<SSE, 0>(__m128i op) { return _mm_cvtepu8_epi32(op); }
+  template<> inline __m128i VEXPAND_QTR<SSE, 1>(__m128i op) { return _mm_cvtepu8_epi32(_mm_srli_si128(op, 4)); }
+  template<> inline __m128i VEXPAND_QTR<SSE, 2>(__m128i op) { return _mm_cvtepu8_epi32(_mm_srli_si128(op, 8)); }
+  template<> inline __m128i VEXPAND_QTR<SSE, 3>(__m128i op) { return _mm_cvtepu8_epi32(_mm_srli_si128(op, 12)); }
   template<> inline __m128i VCOLLAPSE_TO_BYTES<SSE>(__m128i op1, __m128i op2, __m128i op3, __m128i op4) {
     return _mm_packus_epi16(_mm_packs_epi32(op1, op2), _mm_packs_epi32(op3, op4));
   }
@@ -323,14 +327,14 @@ namespace lopper {
   }
   template<> inline float32x4_t VTO_FLOAT<NEON>(int32x4_t op1) { return vcvtq_f32_s32(op1); }
   template<> inline int32x4_t VTO_INT32<NEON>(float32x4_t op1) { return vcvtq_s32_f32(op1); }
-  inline int32x4_t VEXPAND_BYTE_NEON_HELPER(uint32x2_t data) { // lower half of data is valid
+  inline int32x4_t VEXPAND_QTR_NEON_HELPER(uint32x2_t data) { // lower half of data is valid
     auto u_16x8 = vmovl_u8(vreinterpret_u8_u32(data)); // uint16x8, lower half valid
     return vreinterpretq_s32_u32(vmovl_u16(vget_low_u16(u_16x8)));
   }
-  template<> inline int32x4_t VEXPAND_BYTE<NEON, 0>(int32x4_t op) { return VEXPAND_BYTE_NEON_HELPER(vreinterpret_u32_s32(vget_low_s32(op))); }
-  template<> inline int32x4_t VEXPAND_BYTE<NEON, 1>(int32x4_t op) { return VEXPAND_BYTE_NEON_HELPER(vreinterpret_u32_s32(vrev64_s32(vget_low_s32(op)))); }
-  template<> inline int32x4_t VEXPAND_BYTE<NEON, 2>(int32x4_t op) { return VEXPAND_BYTE_NEON_HELPER(vreinterpret_u32_s32(vget_high_s32(op))); }
-  template<> inline int32x4_t VEXPAND_BYTE<NEON, 3>(int32x4_t op) { return VEXPAND_BYTE_NEON_HELPER(vreinterpret_u32_s32(vrev64_s32(vget_high_s32(op)))); }
+  template<> inline int32x4_t VEXPAND_QTR<NEON, 0>(int32x4_t op) { return VEXPAND_QTR_NEON_HELPER(vreinterpret_u32_s32(vget_low_s32(op))); }
+  template<> inline int32x4_t VEXPAND_QTR<NEON, 1>(int32x4_t op) { return VEXPAND_QTR_NEON_HELPER(vreinterpret_u32_s32(vrev64_s32(vget_low_s32(op)))); }
+  template<> inline int32x4_t VEXPAND_QTR<NEON, 2>(int32x4_t op) { return VEXPAND_QTR_NEON_HELPER(vreinterpret_u32_s32(vget_high_s32(op))); }
+  template<> inline int32x4_t VEXPAND_QTR<NEON, 3>(int32x4_t op) { return VEXPAND_QTR_NEON_HELPER(vreinterpret_u32_s32(vrev64_s32(vget_high_s32(op)))); }
   template<> inline int32x4_t VCOLLAPSE_TO_BYTES<NEON>(int32x4_t op1, int32x4_t op2, int32x4_t op3, int32x4_t op4) {
     // TODO(jongmin): Untested and unbenchmarked
     auto t12 = vmaxq_s16(vcombine_s16(vqmovn_s32(op1), vqmovn_s32(op2)), vreinterpretq_s16_s32(VSET<NEON>(0)));
