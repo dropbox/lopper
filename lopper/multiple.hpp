@@ -53,4 +53,6 @@ template<> struct MultipleTrait<int32_t, LOPPER_TARGET> {
 };
 #endif
 
+#define LOPPER_BITWIDTH (::lopper::InstructionSetTrait<LOPPER_TARGET>::num_lanes * 32u)
+
 } // end namespace lopper
