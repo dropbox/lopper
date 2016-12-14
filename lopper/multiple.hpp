@@ -14,7 +14,15 @@ template<> struct InstructionSetTrait<SCALAR> {
   typedef uint8_t UINT8;
   constexpr static size_t num_lanes = 1;
 };
-#if defined(LOPPER_TARGET_SSE4)
+#if defined(LOPPER_TARGET_AVX)
+  template<> struct InstructionSetTrait<AVX> {
+    typedef __m256 FLOAT;
+    typedef __m256i INT32;
+    typedef __m256i UINT8;
+    constexpr static size_t num_lanes = 8;
+  };
+#endif
+#if defined(LOPPER_TARGET_SSE4) || defined(LOPPER_TARGET_AVX)
   template<> struct InstructionSetTrait<SSE> {
     typedef __m128 FLOAT;
     typedef __m128i INT32;
