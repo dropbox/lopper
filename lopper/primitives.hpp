@@ -50,6 +50,7 @@ namespace lopper {
                                              uint8_t op_i, uint8_t op_j, uint8_t op_k, uint8_t op_l,
                                              uint8_t op_m, uint8_t op_n, uint8_t op_o, uint8_t op_p);
   template<InstructionSet S> SINT32 VSET4x4(int32_t, int32_t, int32_t, int32_t);
+  template<InstructionSet S> SINT32 VSET4x8(int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t);
   template<InstructionSet S> SFLOAT VTO_FLOAT(SINT32 op1);
   template<InstructionSet S> SINT32 VTO_INT32(SFLOAT op1);
   template<InstructionSet S, size_t I> typename std::enable_if<I < 4u, SINT32>::type VEXPAND_QTR(SINT32 op);
@@ -109,6 +110,7 @@ namespace lopper {
     return (int32_t)((uint32_t)op_a | ((uint32_t)op_b << 8) | ((uint32_t)op_c << 16) | ((uint32_t)op_d << 24));
   }
   template<> inline int32_t VSET4x4<SCALAR>(int32_t op_a, int32_t, int32_t, int32_t) { return op_a; }
+  template<> inline int32_t VSET4x8<SCALAR>(int32_t op_a, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t) { return op_a; }
   template<> inline int32_t VADD(int32_t op1, int32_t op2) { return op1 + op2; }
   template<> inline int32_t VSUB(int32_t op1, int32_t op2) { return op1 - op2; }
   template<> inline int32_t VMUL(int32_t op1, int32_t op2) { return op1 * op2; }
@@ -237,6 +239,10 @@ namespace lopper {
   }
   template<> inline __m128i VSET4x4<SSE>(int32_t op_a, int32_t op_b, int32_t op_c, int32_t op_d) {
     return _mm_setr_epi32(op_a, op_b, op_c, op_d);
+  }
+  template<> inline __m128i VSET4x8<SSE>(int32_t op_a, int32_t op_b, int32_t op_c, int32_t op_d,
+                                         int32_t, int32_t, int32_t, int32_t) {
+    return VSET4x4<SSE>(op_a, op_b, op_c, op_d);
   }
   template<> inline __m128 VTO_FLOAT<SSE>(__m128i op1) { return _mm_cvtepi32_ps(op1); }
   template<> inline __m128i VTO_INT32<SSE>(__m128 op1) { return _mm_cvttps_epi32(op1); }
@@ -385,7 +391,11 @@ namespace lopper {
                     VSET<SSE>(0));
   }
   template<> inline __m256i VSET4x4<AVX>(int32_t op_a, int32_t op_b, int32_t op_c, int32_t op_d) {
-    return _VCONCAT(VSET4x4<SSE>(op_a, op_b, op_c, op_d), VSET<SSE>(0));
+    return _mm256_setr_epi32(op_a, op_b, op_c, op_d, 0, 0, 0, 0);
+  }
+  template<> inline __m256i VSET4x8<AVX>(int32_t op_a, int32_t op_b, int32_t op_c, int32_t op_d,
+                                         int32_t op_e, int32_t op_f, int32_t op_g, int32_t op_h) {
+    return _mm256_setr_epi32(op_a, op_b, op_c, op_d, op_e, op_f, op_g, op_h);
   }
   template<> inline __m256 VTO_FLOAT<AVX>(__m256i op1) { return _mm256_cvtepi32_ps(op1); }
   template<> inline __m256i VTO_INT32<AVX>(__m256 op1) { return _mm256_cvttps_epi32(op1); }
@@ -568,6 +578,10 @@ namespace lopper {
   template<> inline int32x4_t VSET4x4<NEON>(int32_t op_a, int32_t op_b, int32_t op_c, int32_t op_d) {
     return vcombine_s32(vcreate_s32(((uint64_t)op_a) | ((uint64_t)op_c << 32)),
                         vcreate_s32(((uint64_t)op_b) | ((uint64_t)op_d << 32)));
+  }
+  template<> inline int32x4_t VSET4x8<NEON>(int32_t op_a, int32_t op_b, int32_t op_c, int32_t op_d,
+                                            int32_t, int32_t, int32_t, int32_t) {
+    return VSET4x4<NEON>(op_a, op_b, op_c, op_d);
   }
   template<> inline float32x4_t VTO_FLOAT<NEON>(int32x4_t op1) { return vcvtq_f32_s32(op1); }
   template<> inline int32x4_t VTO_INT32<NEON>(float32x4_t op1) { return vcvtq_s32_f32(op1); }
