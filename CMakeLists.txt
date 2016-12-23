@@ -18,11 +18,17 @@ endif ()
 # Header files directory.
 include_directories (".")
 
+# Turn on AVX.
+OPTION (USE_AVX "Use Intel Streaming SIMD Extensions (AVX)" OFF)
+if (USE_AVX)
+  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx")
+endif (USE_AVX)
+
 # Turn on SSE.
 OPTION (USE_SSE "Use Intel Streaming SIMD Extensions (SSE)" ON)
-if (USE_SSE)
+if (USE_SSE AND NOT USE_AVX)
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse4.2")
-endif (USE_SSE)
+endif ()
 
 # Source files.
 file (GLOB lopper_test_files "tests/*.cpp")

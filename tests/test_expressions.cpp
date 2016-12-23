@@ -372,24 +372,25 @@ TYPED_TEST_P(LopperTypedTest, TwoChannelTest) {
   }
 }
 
-TYPED_TEST_P(LopperTypedTest, ThreeChannelTest) {
-  Image<uint8_t> in(3, 100, 100);
+template<typename T, bool useSIMD> void _threeChannelTestHelper() {
+  srand(0);
+  Image<T> in(3, 100, 100);
   for (int y = 0; y < in.getHeight(); y++) {
     for (int x = 0; x < in.getWidth(); x++) {
-      in(x, y, 0) = 99;
-      in(x, y, 1) = 11;
-      in(x, y, 2) = 222;
+      in(x, y, 0) = rand() % 256;
+      in(x, y, 1) = rand() % 256;
+      in(x, y, 2) = rand() % 256;
     }
   }
   { // Try computing (R + G * B) * 2
     Image<int32_t> out(1, 100, 100);
     ExprPrepareContext();
     auto rgb = ExprCache(Expr<3>(in));
-    auto r = rgb.get<0>();
-    auto g = rgb.get<1>();
-    auto b = rgb.get<2>();
+    auto r = rgb.template get<0>();
+    auto g = rgb.template get<1>();
+    auto b = rgb.template get<2>();
     auto tmp = ExprCache(r + (g * b));
-    ExprEvalWithContextSIMD(TypeParam::value, Expr<1>(out) = tmp + tmp);
+    ExprEvalWithContextSIMD(useSIMD, Expr<1>(out) = tmp + tmp);
     for (int y = 0; y < in.getHeight(); y++) {
       for (int x = 0; x < in.getWidth(); x++) {
         int32_t r = in(x, y, 0);
@@ -400,13 +401,13 @@ TYPED_TEST_P(LopperTypedTest, ThreeChannelTest) {
     }
   }
   { // Try shuffling the channels
-    Image<uint8_t> out(3, 100, 100);
+    Image<T> out(3, 100, 100);
     ExprPrepareContext();
     auto rgb = ExprCache(Expr<3>(in));
-    auto r = rgb.get<0>();
-    auto g = rgb.get<1>();
-    auto b = rgb.get<2>();
-    ExprEvalWithContextSIMD(TypeParam::value, Expr<3>(out) = std::make_tuple(g, b, r));
+    auto r = rgb.template get<0>();
+    auto g = rgb.template get<1>();
+    auto b = rgb.template get<2>();
+    ExprEvalWithContextSIMD(useSIMD, Expr<3>(out) = std::make_tuple(g, b, r));
     for (int y = 0; y < in.getHeight(); y++) {
       for (int x = 0; x < in.getWidth(); x++) {
         ASSERT_EQ(in(x, y, 1), out(x, y, 0));
@@ -415,6 +416,11 @@ TYPED_TEST_P(LopperTypedTest, ThreeChannelTest) {
       }
     }
   }
+}
+
+TYPED_TEST_P(LopperTypedTest, ThreeChannelTest) {
+  _threeChannelTestHelper<uint8_t, TypeParam::value>();
+  _threeChannelTestHelper<int32_t, TypeParam::value>();
 }
 
 TYPED_TEST_P(LopperTypedTest, FourChannelTest) {
@@ -562,7 +568,7 @@ REGISTER_TYPED_TEST_CASE_P(LopperTypedTest,
                            ScopeTest);
 
 template<InstructionSet S> struct LopperSettingType {
-  static constexpr InstructionSet value = S;
+  static constexpr bool value = (S != SCALAR);
 };
 #ifdef LOPPER_NO_SIMD
 typedef testing::Types<LopperSettingType<LOPPER_TARGET>> LopperSettingTypes;

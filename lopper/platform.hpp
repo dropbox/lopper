@@ -7,6 +7,7 @@ typedef enum {
   SCALAR, /* no vectorization */
   SSE,
   NEON,
+  AVX
 } InstructionSet;
 
 } // end namespace lopper
@@ -15,8 +16,12 @@ typedef enum {
  * and include the appropriate header if needed.
  */
 #ifdef LOPPER_NO_SIMD
-  #if defined(LOPPER_TARGET_SSE4) || defined(LOPPER_TARGET_NEON)
+  #if defined(LOPPER_TARGET_SSE4) || defined(LOPPER_TARGET_NEON) || defined(LOPPER_TARGET_AVX)
     #error "Cannot define vectorization macros with LOPPER_NO_SIMD"
+  #endif
+#elif defined(__AVX__)
+  #ifndef LOPPER_TARGET_AVX
+    #define LOPPER_TARGET_AVX
   #endif
 #elif defined(__SSE4_2__)
   #ifndef LOPPER_TARGET_SSE4
@@ -28,8 +33,11 @@ typedef enum {
   #endif
 #endif
 
-#if defined(LOPPER_TARGET_SSE4) and defined(LOPPER_TARGET_NEON)
-  #error "Cannot define vectorization macros for both SSE and NEON"
+#if (defined(LOPPER_TARGET_SSE4)?1:0) + (defined(LOPPER_TARGET_NEON)?1:0) + (defined(LOPPER_TARGET_AVX)?1:0) > 1
+  #error "Cannot define vectorization macros for multiple distinct targets"
+#elif defined(LOPPER_TARGET_AVX)
+  #include <immintrin.h>
+  #define LOPPER_TARGET ::lopper::AVX
 #elif defined(LOPPER_TARGET_SSE4)
   #include <smmintrin.h>
   #define LOPPER_TARGET ::lopper::SSE
