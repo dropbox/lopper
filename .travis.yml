@@ -1,18 +1,27 @@
 language: cpp
 sudo: required
 dist: trusty
-compiler:
-  - clang
-  - gcc
-os:
-  - linux
+os: linux
+matrix:
+  include:
+  - compiler: gcc
+    env: COMPILER=g++ C_COMPILER=gcc
+  - compiler: clang
+    addons:
+      apt:
+        packages:
+          clang-3.8
+    env: COMPILER=clang++-3.8 C_COMPILER=clang-3.8
+# Consider enabling AVX if/when CI container supports it.
+# env:
+#  - LOPPER_TARGET_OPTION="-DUSE_SSE=ON -DUSE_AVX=OFF"
 before_install:
-  - sudo apt-get update
+  - sudo apt-get update -q
   - sudo apt-get install libgtest-dev
   - "cd /usr/src/gtest && CC=gcc CXX=g++ sudo cmake . && sudo cmake --build . && sudo mv libg* /usr/local/lib/ ; cd -"
   - echo $LANG
   - echo $CXX
-script: "cd $TRAVIS_BUILD_DIR; mkdir cmake_build; cd cmake_build; cmake ..; make run_test"
+script: "cd $TRAVIS_BUILD_DIR; mkdir cmake_build; cd cmake_build; cmake -DCMAKE_C_COMPILER=${C_COMPILER} -DCMAKE_CXX_COMPILER=${COMPILER} ..; make run_test"
 branches:
   only:
   - master
