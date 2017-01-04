@@ -422,6 +422,16 @@ template<> inline void _PixelStorer<LOPPER_TARGET>::store3<int32_t>(int32_t* ptr
     VSTORE(ptr + 16, VSELECT<LOPPER_TARGET>(mask0, VSELECT<LOPPER_TARGET>(mask1, tmp0, tmp2), tmp1));
   }
 }
+
+template<> inline void _PixelStorer<LOPPER_TARGET>::store3<float>(float* ptr,
+                                                                  const Multiple<float, LOPPER_TARGET>& val0,
+                                                                  const Multiple<float, LOPPER_TARGET>& val1,
+                                                                  const Multiple<float, LOPPER_TARGET>& val2) {
+  _PixelStorer<LOPPER_TARGET>::store3<int32_t>(reinterpret_cast<int32_t*>(ptr),
+                                               VCAST_INT32<LOPPER_TARGET>(val0),
+                                               VCAST_INT32<LOPPER_TARGET>(val1),
+                                               VCAST_INT32<LOPPER_TARGET>(val2));
+}
 #endif
 
 /*=============================== Expressions for writing memory ===============================*/

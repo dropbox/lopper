@@ -1,6 +1,7 @@
 #include <cstring>
 #include <memory>
 #include <stdlib.h>
+#include <type_traits>
 #include <vector>
 #include <gtest/gtest.h>
 
@@ -383,7 +384,8 @@ template<typename T, bool useSIMD> void _threeChannelTestHelper() {
     }
   }
   { // Try computing (R + G * B) * 2
-    Image<int32_t> out(1, 100, 100);
+    typedef typename std::conditional<std::is_same<T, float>::value, float, int32_t>::type T_out;
+    Image<T_out> out(1, 100, 100);
     ExprPrepareContext();
     auto rgb = ExprCache(Expr<3>(in));
     auto r = rgb.template get<0>();
@@ -421,6 +423,7 @@ template<typename T, bool useSIMD> void _threeChannelTestHelper() {
 TYPED_TEST_P(LopperTypedTest, ThreeChannelTest) {
   _threeChannelTestHelper<uint8_t, TypeParam::value>();
   _threeChannelTestHelper<int32_t, TypeParam::value>();
+  _threeChannelTestHelper<float, TypeParam::value>();
 }
 
 TYPED_TEST_P(LopperTypedTest, FourChannelTest) {
