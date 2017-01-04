@@ -380,34 +380,52 @@ TYPED_TEST_P(LopperTypedPrimitiveTest, Comparison) {
 }
 
 TYPED_TEST_P(LopperTypedPrimitiveTest, Select) {
-  int32_t selector[4] = {123, 0, -998, 1};
-  int32_t lhs1[4] = {0x12345678, 0x21436587, 0x12191919, 0x21212121};
-  int32_t rhs1[4] = {0x11111111, 0x22222222, 0x01234567, 0x13131313};
-  float lhs2[4] = {123.f, 456.f, -123.f, -456.f};
-  float rhs2[4] = {999.f, 888.f, 777.f, -666.f};
-  int32_t result_computed1[4];
-  float result_computed2[4];
+  int32_t selector[8] = {123, 0, -998, 1, 0, 0, 11, -35};
+  int32_t lhs1[8] = {0x12345678, 0x21436587, 0x12191919, 0x21212121, 0x0, 0x1, 0x2, 0x3};
+  int32_t rhs1[8] = {0x11111111, 0x22222222, 0x01234567, 0x13131313, 0x3, 0x2, 0x1, 0x0};
+  float lhs2[8] = {123.f, 456.f, -123.f, -456.f, 0.f, 99.9f, 0.001f, -0.001f};
+  float rhs2[8] = {999.f, 888.f, 777.f, -666.f, 998.f, -123.f, 1.f, 19383.32f};
+  int32_t result_computed1[8];
+  float result_computed2[8];
   // Select int32_t.
-  for (size_t i = 0; i < 4; i+=TypeParam::num_lanes) {
+  for (size_t i = 0; i < 8; i+=TypeParam::num_lanes) {
     VSTORE(result_computed1 + i,
            VSELECT<TypeParam::value>(VLOAD<TypeParam::value>(selector + i),
                                   VLOAD<TypeParam::value>(lhs1 + i),
                                   VLOAD<TypeParam::value>(rhs1 + i)));
   }
   // Check result.
-  for (size_t i = 0; i < 4; i++) {
+  for (size_t i = 0; i < 8; i++) {
     ASSERT_EQ(selector[i] == 0 ? lhs1[i] : rhs1[i], result_computed1[i]);
   }
   // Select float.
-  for (size_t i = 0; i < 4; i+=TypeParam::num_lanes) {
+  for (size_t i = 0; i < 8; i+=TypeParam::num_lanes) {
     VSTORE(result_computed2 + i,
            VSELECT<TypeParam::value>(VLOAD<TypeParam::value>(selector + i),
                                   VLOAD<TypeParam::value>(lhs2 + i),
                                   VLOAD<TypeParam::value>(rhs2 + i)));
   }
   // Check result.
-  for (size_t i = 0; i < 4; i++) {
+  for (size_t i = 0; i < 8; i++) {
     ASSERT_EQ(selector[i] == 0 ? lhs2[i] : rhs2[i], result_computed2[i]);
+  }
+}
+
+TYPED_TEST_P(LopperTypedPrimitiveTest, InterleaveTest) {
+  int32_t v0[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+  int32_t v1[8] = {101, 102, 103, 104, 105, 106, 107, 108};
+  int32_t result[8];
+  for (size_t i = 0; i < 8; i+=TypeParam::num_lanes) {
+    const auto _v0 = VLOAD<TypeParam::value>(v0 + i);
+    const auto _v1 = VLOAD<TypeParam::value>(v1 + i);
+    VSTORE(result, VINTERLEAVE32_LO(_v0, _v1));
+    for (size_t j = 0; j < TypeParam::num_lanes; j++) {
+      ASSERT_EQ(result[j], (j % 2 == 0 ? v0 : v1)[i+(j>>1)]);
+    }
+    VSTORE(result, VINTERLEAVE32_HI(_v0, _v1));
+    for (size_t j = TypeParam::num_lanes; j < (TypeParam::num_lanes << 1); j++) {
+      ASSERT_EQ(result[j - TypeParam::num_lanes], (j % 2 == 0 ? v0 : v1)[i+(j>>1)]);
+    }
   }
 }
 
@@ -425,7 +443,8 @@ REGISTER_TYPED_TEST_CASE_P(LopperTypedPrimitiveTest,
                            Shuffle8,
                            Shuffle32,
                            Comparison,
-                           Select);
+                           Select,
+                           InterleaveTest);
 
 template<InstructionSet S> struct LopperSettingType {
   static constexpr InstructionSet value = S;
