@@ -576,8 +576,8 @@ namespace lopper {
                         vcreate_s32(((uint64_t)literal2) | ((uint64_t)literal3 << 32)));
   }
   template<> inline int32x4_t VSET4x4<NEON>(int32_t op_a, int32_t op_b, int32_t op_c, int32_t op_d) {
-    return vcombine_s32(vcreate_s32(((uint64_t)op_a) | ((uint64_t)op_c << 32)),
-                        vcreate_s32(((uint64_t)op_b) | ((uint64_t)op_d << 32)));
+    return vcombine_s32(vcreate_s32(((uint64_t)(uint32_t)op_a) | ((uint64_t)(uint32_t)op_b << 32)),
+                        vcreate_s32(((uint64_t)(uint32_t)op_c) | ((uint64_t)(uint32_t)op_d << 32)));
   }
   template<> inline int32x4_t VSET4x8<NEON>(int32_t op_a, int32_t op_b, int32_t op_c, int32_t op_d,
                                             int32_t, int32_t, int32_t, int32_t) {
