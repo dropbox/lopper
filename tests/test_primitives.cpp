@@ -308,7 +308,8 @@ TYPED_TEST_P(LopperTypedPrimitiveTest, Shuffle8) {
     VSTORE(output, VSHUFFLE8<TypeParam::value>(vec_data, vec_indices));
 
     for (size_t i = 0; i < num_bytes; i++) {
-      if (indices[j + i] == 255u) {
+      // NOTE: On NEON, any OOB value gets you zero, whereas on Intel the only LSBs are used.
+      if (indices[j + i] == 255u || (indices[j + i] >= 16u && TypeParam::value == NEON)) {
         ASSERT_EQ(0u, output[i]);
       } else {
         ASSERT_EQ(data[j + (indices[j + i] % num_bytes)], output[i]);
