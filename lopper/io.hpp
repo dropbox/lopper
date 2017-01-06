@@ -64,210 +64,233 @@ template<> struct _PixelLoader<SCALAR> {
 
 #ifndef LOPPER_NO_SIMD
 // TODO(jongmin): NEON could probably use vld3 instructions to avoid shuffling manually.
+
+// _DataLoader is the helper class for loading primitives of size D bytes in C interleaved channels.
+// It's intentionally abstracted out so that _PixelLoader can apply logic like clamping if necessary.
+template<size_t D, size_t C> struct _DataLoader /* <LOPPER_TARGET> */ {
+  inline static constexpr size_t bytesPerOp();
+};
 template<> struct _PixelLoader<LOPPER_TARGET> {
-  template<typename T> inline static MultipleIO<T, LOPPER_TARGET> load(const T* ptr);
-  template<typename T, size_t C> static constexpr size_t bytesPerOp();
-  template<typename T, size_t C> inline static MultipleIOTuple<T, C, LOPPER_TARGET> load(const T* ptr);
+  template<typename T, size_t C> static constexpr size_t bytesPerOp() {
+    return _DataLoader<sizeof(T), C>::bytesPerOp();
+  }
+  template<typename T> inline static MultipleIO<T, LOPPER_TARGET> load(const T* ptr) {
+    return _DataLoader<sizeof(T), 1>::template load<T>(ptr);
+  }
+  template<typename T, size_t C> inline static MultipleIOTuple<T, C, LOPPER_TARGET> load(const T* ptr) {
+    return _DataLoader<sizeof(T), C>::template load<T>(ptr);
+  }
 };
 
-// Specialization for int32_t
-template<> inline constexpr size_t _PixelLoader<LOPPER_TARGET>::bytesPerOp<int32_t, 1>() { return LOPPER_BITWIDTH >> 3; }
-template<> inline constexpr size_t _PixelLoader<LOPPER_TARGET>::bytesPerOp<int32_t, 2>() { return LOPPER_BITWIDTH >> 2; }
-template<> inline constexpr size_t _PixelLoader<LOPPER_TARGET>::bytesPerOp<int32_t, 3>() { return (LOPPER_BITWIDTH >> 3) * 3; }
-template<> inline constexpr size_t _PixelLoader<LOPPER_TARGET>::bytesPerOp<int32_t, 4>() { return LOPPER_BITWIDTH >> 1; }
-template<> inline Multiple<int32_t, LOPPER_TARGET> _PixelLoader<LOPPER_TARGET>::load<int32_t>(const int32_t* ptr) {
-  return VLOAD<LOPPER_TARGET>(ptr);
-}
-template<> inline MultipleIOTuple<int32_t, 3, LOPPER_TARGET>
-_PixelLoader<LOPPER_TARGET>::load<int32_t, 3>(const int32_t* ptr) {
-  constexpr size_t num_lanes = InstructionSetTrait<LOPPER_TARGET>::num_lanes;
-  const auto in0 = VLOAD<LOPPER_TARGET>(ptr);
-  const auto in1 = VLOAD<LOPPER_TARGET>(ptr + num_lanes);
-  const auto in2 = VLOAD<LOPPER_TARGET>(ptr + (num_lanes << 1));
-  if (num_lanes == 4u) {
-    // We want to go from [R0 G0 B0 R1] [G1 B1 R2 G2] [B2 R3 G3 B3] to [R0..R3] [G0..G3] [B0..B3]
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler00
-      = VSET8x16<LOPPER_TARGET>(0, 1, 2, 3, 12, 13, 14, 15, 128, 128, 128, 128, 128, 128, 128, 128);
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler01
-      = VSET8x16<LOPPER_TARGET>(128, 128, 128, 128, 128, 128, 128, 128, 8, 9, 10, 11, 128, 128, 128, 128);
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler02
-      = VSET8x16<LOPPER_TARGET>(128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 4, 5, 6, 7);
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler10
-      = VSET8x16<LOPPER_TARGET>(4, 5, 6, 7, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128);
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler11
-      = VSET8x16<LOPPER_TARGET>(128, 128, 128, 128, 0, 1, 2, 3, 12, 13, 14, 15, 128, 128, 128, 128);
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler12
-      = VSET8x16<LOPPER_TARGET>(128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 8, 9, 10, 11);
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler20
-      = VSET8x16<LOPPER_TARGET>(8, 9, 10, 11, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128);
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler21
-      = VSET8x16<LOPPER_TARGET>(128, 128, 128, 128, 4, 5, 6, 7, 128, 128, 128, 128, 128, 128, 128, 128);
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler22
-      = VSET8x16<LOPPER_TARGET>(128, 128, 128, 128, 128, 128, 128, 128, 0, 1, 2, 3, 12, 13, 14, 15);
-
-    const auto out0 = VBITWISE_OR(VBITWISE_OR(VSHUFFLE8<LOPPER_TARGET>(in0, _deshuffler00),
-                                              VSHUFFLE8<LOPPER_TARGET>(in1, _deshuffler01)),
-                                  VSHUFFLE8<LOPPER_TARGET>(in2, _deshuffler02));
-    const auto out1 = VBITWISE_OR(VBITWISE_OR(VSHUFFLE8<LOPPER_TARGET>(in0, _deshuffler10),
-                                              VSHUFFLE8<LOPPER_TARGET>(in1, _deshuffler11)),
-                                  VSHUFFLE8<LOPPER_TARGET>(in2, _deshuffler12));
-    const auto out2 = VBITWISE_OR(VBITWISE_OR(VSHUFFLE8<LOPPER_TARGET>(in0, _deshuffler20),
-                                              VSHUFFLE8<LOPPER_TARGET>(in1, _deshuffler21)),
-                                  VSHUFFLE8<LOPPER_TARGET>(in2, _deshuffler22));
-    return std::make_tuple(out0, out1, out2);
-  } else if (num_lanes == 8u) {
-    // Go from [R0 G0 B0 R1 G1 B1 R2 G2] [B2 R3 G3 B3 R4 G4 B4 R5] [G5 B5 R6 G6 B6 R7 G7 B7]
-    // to [R0..R7] [G0..G7] [B0..B7]
-    // Extract the appropriate channels from input vectors, using bitwise masks.
-    const auto mask0 = VSET4x8<LOPPER_TARGET>(-1, 0, 0, -1, 0, 0, -1, 0);
-    const auto mask1 = VSET4x8<LOPPER_TARGET>(0, -1, 0, 0, -1, 0, 0, -1);
-    const auto mask2 = VSET4x8<LOPPER_TARGET>(0, 0, -1, 0, 0, -1, 0, 0);
-    const auto tmp0 = VBITWISE_OR(VBITWISE_OR(VBITWISE_AND(mask0, in0), VBITWISE_AND(mask1, in1)), VBITWISE_AND(mask2, in2));
-    const auto tmp1 = VBITWISE_OR(VBITWISE_OR(VBITWISE_AND(mask0, in2), VBITWISE_AND(mask1, in0)), VBITWISE_AND(mask2, in1));
-    const auto tmp2 = VBITWISE_OR(VBITWISE_OR(VBITWISE_AND(mask0, in1), VBITWISE_AND(mask1, in2)), VBITWISE_AND(mask2, in0));
-    // At this point, we should have:
-    //  tmp0 = R0 R3 R6 R1 R4 R7 R2 R5
-    //  tmp1 = G5 G0 G3 G6 G1 G4 G7 G2
-    //  tmp2 = B2 B5 B0 B3 B6 B1 B4 B7
-    return std::make_tuple(VSHUFFLE32<LOPPER_TARGET>(tmp0, VSET4x8<LOPPER_TARGET>(0, 3, 6, 1, 4, 7, 2, 5)),
-                           VSHUFFLE32<LOPPER_TARGET>(tmp1, VSET4x8<LOPPER_TARGET>(1, 4, 7, 2, 5, 0, 3, 6)),
-                           VSHUFFLE32<LOPPER_TARGET>(tmp2, VSET4x8<LOPPER_TARGET>(2, 5, 0, 3, 6, 1, 4, 7)));
+template<> struct _DataLoader<1, 1> {
+  inline static constexpr size_t bytesPerOp() { return LOPPER_BITWIDTH >> 3; }
+  template<typename T> inline static MultipleIO<T, LOPPER_TARGET> load(const T* ptr) {
+    // T is expected to be uint8_t
+    static_assert(std::is_same<T, uint8_t>::value, "Expect uint8_t");
+    return VEXPAND_QTR<LOPPER_TARGET, 0>(VLOAD<LOPPER_TARGET>(ptr));
   }
-}
+};
 
-// Specialization for uint8_t
-template<> inline constexpr size_t _PixelLoader<LOPPER_TARGET>::bytesPerOp<uint8_t, 1>() { return LOPPER_BITWIDTH >> 3; }
-template<> inline constexpr size_t _PixelLoader<LOPPER_TARGET>::bytesPerOp<uint8_t, 2>() { return LOPPER_BITWIDTH >> 3; }
-template<> inline constexpr size_t _PixelLoader<LOPPER_TARGET>::bytesPerOp<uint8_t, 3>() { return LOPPER_BITWIDTH >> 3; }
-template<> inline constexpr size_t _PixelLoader<LOPPER_TARGET>::bytesPerOp<uint8_t, 4>() { return LOPPER_BITWIDTH >> 3; }
-template<> inline Multiple<int32_t, LOPPER_TARGET> _PixelLoader<LOPPER_TARGET>::load<uint8_t>(const uint8_t* ptr) {
-  return VEXPAND_QTR<LOPPER_TARGET, 0>(VLOAD<LOPPER_TARGET>(ptr));
-}
-template<> inline MultipleIOTuple<uint8_t, 2, LOPPER_TARGET>
-_PixelLoader<LOPPER_TARGET>::load<uint8_t, 2>(const uint8_t* ptr) {
-  const auto in = VLOAD<LOPPER_TARGET>(ptr);
-  const auto deshuffler = VSET4x8<LOPPER_TARGET>(0xff01ff00,
-                                                 0xff03ff02,
-                                                 0xff05ff04,
-                                                 0xff07ff06,
-                                                 0xff09ff08,
-                                                 0xff0bff0a,
-                                                 0xff0dff0c,
-                                                 0xff0fff0e);
-  const auto tmp = VSHUFFLE8<LOPPER_TARGET>(in, deshuffler);
-  return std::make_tuple(VBITWISE_AND(tmp, VSET<LOPPER_TARGET>(255)), VSHIFTR<16>(tmp));
-}
-template<> inline MultipleIOTuple<uint8_t, 3, LOPPER_TARGET>
-_PixelLoader<LOPPER_TARGET>::load<uint8_t, 3>(const uint8_t* ptr) {
-  constexpr size_t num_lanes = InstructionSetTrait<LOPPER_TARGET>::num_lanes;
-  const auto in = VLOAD<LOPPER_TARGET>(ptr);
-  if (num_lanes == 4u) {
-    const auto _deshuffler0 =
-      VSET8x16<LOPPER_TARGET>(0, 255, 255, 255, 3, 255, 255, 255, 6, 255, 255, 255, 9, 255, 255, 255);
-    const auto _deshuffler1 =
-      VSET8x16<LOPPER_TARGET>(1, 255, 255, 255, 4, 255, 255, 255, 7, 255, 255, 255, 10, 255, 255, 255);
-    const auto _deshuffler2 =
-      VSET8x16<LOPPER_TARGET>(2, 255, 255, 255, 5, 255, 255, 255, 8, 255, 255, 255, 11, 255, 255, 255);
+template<> struct _DataLoader<1, 2> {
+  inline static constexpr size_t bytesPerOp() { return LOPPER_BITWIDTH >> 3; }
+  template<typename T> inline static MultipleIOTuple<T, 2, LOPPER_TARGET> load(const T* ptr) {
+    // T is expected to be uint8_t
+    static_assert(std::is_same<T, uint8_t>::value, "Expect uint8_t");
     const auto in = VLOAD<LOPPER_TARGET>(ptr);
-    return std::make_tuple(VSHUFFLE8<LOPPER_TARGET>(in, _deshuffler0),
-                           VSHUFFLE8<LOPPER_TARGET>(in, _deshuffler1),
-                           VSHUFFLE8<LOPPER_TARGET>(in, _deshuffler2));
-  } else if (num_lanes == 8u) {
-    // [R0 G0 B0 R1 G1 B1 ... R7 G7 B7 _ ... _]
-    const auto deshuffler = VSET4x8<LOPPER_TARGET>(0xff020100,
-                                                   0xff050403,
-                                                   0xff080706,
-                                                   0xff0b0a09,
-                                                   0xff0e0d0c,
-                                                   0xff11100f,
-                                                   0xff141312,
-                                                   0xff171615);
+    const auto deshuffler = VSET4x8<LOPPER_TARGET>(0xff01ff00,
+                                                   0xff03ff02,
+                                                   0xff05ff04,
+                                                   0xff07ff06,
+                                                   0xff09ff08,
+                                                   0xff0bff0a,
+                                                   0xff0dff0c,
+                                                   0xff0fff0e);
+    const auto tmp = VSHUFFLE8<LOPPER_TARGET>(in, deshuffler);
+    return std::make_tuple(VBITWISE_AND(tmp, VSET<LOPPER_TARGET>(255)), VSHIFTR<16>(tmp));
+  }
+};
+
+template<> struct _DataLoader<1, 3> {
+  inline static constexpr size_t bytesPerOp() { return LOPPER_BITWIDTH >> 3; }
+  template<typename T> inline static MultipleIOTuple<T, 3, LOPPER_TARGET> load(const T* ptr) {
+    // T is expected to be uint8_t
+    static_assert(std::is_same<T, uint8_t>::value, "Expect uint8_t");
+    constexpr size_t num_lanes = InstructionSetTrait<LOPPER_TARGET>::num_lanes;
+    const auto in = VLOAD<LOPPER_TARGET>(ptr);
+    if (num_lanes == 4u) {
+      const auto _deshuffler0 =
+        VSET8x16<LOPPER_TARGET>(0, 255, 255, 255, 3, 255, 255, 255, 6, 255, 255, 255, 9, 255, 255, 255);
+      const auto _deshuffler1 =
+        VSET8x16<LOPPER_TARGET>(1, 255, 255, 255, 4, 255, 255, 255, 7, 255, 255, 255, 10, 255, 255, 255);
+      const auto _deshuffler2 =
+        VSET8x16<LOPPER_TARGET>(2, 255, 255, 255, 5, 255, 255, 255, 8, 255, 255, 255, 11, 255, 255, 255);
+      const auto in = VLOAD<LOPPER_TARGET>(ptr);
+      return std::make_tuple(VSHUFFLE8<LOPPER_TARGET>(in, _deshuffler0),
+                             VSHUFFLE8<LOPPER_TARGET>(in, _deshuffler1),
+                             VSHUFFLE8<LOPPER_TARGET>(in, _deshuffler2));
+    } else if (num_lanes == 8u) {
+      // [R0 G0 B0 R1 G1 B1 ... R7 G7 B7 _ ... _]
+      const auto deshuffler = VSET4x8<LOPPER_TARGET>(0xff020100,
+                                                     0xff050403,
+                                                     0xff080706,
+                                                     0xff0b0a09,
+                                                     0xff0e0d0c,
+                                                     0xff11100f,
+                                                     0xff141312,
+                                                     0xff171615);
+      const auto tmp = VSHUFFLE8<LOPPER_TARGET>(in, deshuffler);
+      return std::make_tuple(VBITWISE_AND(tmp, VSET<LOPPER_TARGET>(255)),
+                             VBITWISE_AND(VSHIFTR<8>(tmp), VSET<LOPPER_TARGET>(255)),
+                             VSHIFTR<16>(tmp));
+    }
+  }
+};
+
+template<> struct _DataLoader<1, 4> {
+  inline static constexpr size_t bytesPerOp() { return LOPPER_BITWIDTH >> 3; }
+  template<typename T> inline static MultipleIOTuple<T, 4, LOPPER_TARGET> load(const T* ptr) {
+    // T is expected to be uint8_t
+    static_assert(std::is_same<T, uint8_t>::value, "Expect uint8_t");
+    const auto in = VLOAD<LOPPER_TARGET>(ptr);
+    const auto deshuffler = VSET4x8<LOPPER_TARGET>(0x03020100,
+                                                   0x07060504,
+                                                   0x0b0a0908,
+                                                   0x0f0e0d0c,
+                                                   0x13121110,
+                                                   0x17161514,
+                                                   0x1b1a1918,
+                                                   0x1f1e1d1c);
     const auto tmp = VSHUFFLE8<LOPPER_TARGET>(in, deshuffler);
     return std::make_tuple(VBITWISE_AND(tmp, VSET<LOPPER_TARGET>(255)),
                            VBITWISE_AND(VSHIFTR<8>(tmp), VSET<LOPPER_TARGET>(255)),
-                           VSHIFTR<16>(tmp));
+                           VBITWISE_AND(VSHIFTR<16>(tmp), VSET<LOPPER_TARGET>(255)),
+                           VBITWISE_AND(VSHIFTR<24>(tmp), VSET<LOPPER_TARGET>(255)));
   }
-}
-template<> inline MultipleIOTuple<uint8_t, 4, LOPPER_TARGET>
-_PixelLoader<LOPPER_TARGET>::load<uint8_t, 4>(const uint8_t* ptr) {
-  const auto in = VLOAD<LOPPER_TARGET>(ptr);
-  const auto deshuffler = VSET4x8<LOPPER_TARGET>(0x03020100,
-                                                 0x07060504,
-                                                 0x0b0a0908,
-                                                 0x0f0e0d0c,
-                                                 0x13121110,
-                                                 0x17161514,
-                                                 0x1b1a1918,
-                                                 0x1f1e1d1c);
-  const auto tmp = VSHUFFLE8<LOPPER_TARGET>(in, deshuffler);
-  return std::make_tuple(VBITWISE_AND(tmp, VSET<LOPPER_TARGET>(255)),
-                         VBITWISE_AND(VSHIFTR<8>(tmp), VSET<LOPPER_TARGET>(255)),
-                         VBITWISE_AND(VSHIFTR<16>(tmp), VSET<LOPPER_TARGET>(255)),
-                         VBITWISE_AND(VSHIFTR<24>(tmp), VSET<LOPPER_TARGET>(255)));
-}
+};
 
-// Specialization for float
-template<> inline constexpr size_t _PixelLoader<LOPPER_TARGET>::bytesPerOp<float, 1>() { return LOPPER_BITWIDTH >> 3; }
-template<> inline constexpr size_t _PixelLoader<LOPPER_TARGET>::bytesPerOp<float, 2>() { return LOPPER_BITWIDTH >> 2; }
-template<> inline constexpr size_t _PixelLoader<LOPPER_TARGET>::bytesPerOp<float, 3>() { return (LOPPER_BITWIDTH >> 3) * 3; }
-template<> inline Multiple<float, LOPPER_TARGET> _PixelLoader<LOPPER_TARGET>::load<float>(const float* ptr) {
-  return VLOAD<LOPPER_TARGET>(ptr);
-}
-template<> inline MultipleIOTuple<float, 3, LOPPER_TARGET>
-_PixelLoader<LOPPER_TARGET>::load<float, 3>(const float* ptr) {
-  constexpr size_t num_lanes = InstructionSetTrait<LOPPER_TARGET>::num_lanes;
-  const auto in0 = VCAST_INT32<LOPPER_TARGET>(VLOAD<LOPPER_TARGET>(ptr));
-  const auto in1 = VCAST_INT32<LOPPER_TARGET>(VLOAD<LOPPER_TARGET>(ptr + num_lanes));
-  const auto in2 = VCAST_INT32<LOPPER_TARGET>(VLOAD<LOPPER_TARGET>(ptr + (num_lanes << 1)));
-  if (num_lanes == 4u) {
-    // We want to go from [R0 G0 B0 R1] [G1 B1 R2 G2] [B2 R3 G3 B3] to [R0..R3] [G0..G3] [B0..B3]
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler00
-      = VSET8x16<LOPPER_TARGET>(0, 1, 2, 3, 12, 13, 14, 15, 128, 128, 128, 128, 128, 128, 128, 128);
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler01
-      = VSET8x16<LOPPER_TARGET>(128, 128, 128, 128, 128, 128, 128, 128, 8, 9, 10, 11, 128, 128, 128, 128);
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler02
-      = VSET8x16<LOPPER_TARGET>(128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 4, 5, 6, 7);
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler10
-      = VSET8x16<LOPPER_TARGET>(4, 5, 6, 7, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128);
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler11
-      = VSET8x16<LOPPER_TARGET>(128, 128, 128, 128, 0, 1, 2, 3, 12, 13, 14, 15, 128, 128, 128, 128);
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler12
-      = VSET8x16<LOPPER_TARGET>(128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 8, 9, 10, 11);
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler20
-      = VSET8x16<LOPPER_TARGET>(8, 9, 10, 11, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128);
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler21
-      = VSET8x16<LOPPER_TARGET>(128, 128, 128, 128, 4, 5, 6, 7, 128, 128, 128, 128, 128, 128, 128, 128);
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler22
-      = VSET8x16<LOPPER_TARGET>(128, 128, 128, 128, 128, 128, 128, 128, 0, 1, 2, 3, 12, 13, 14, 15);
-    const auto out0 = VBITWISE_OR(VBITWISE_OR(VSHUFFLE8<LOPPER_TARGET>(in0, _deshuffler00),
-                                              VSHUFFLE8<LOPPER_TARGET>(in1, _deshuffler01)),
-                                  VSHUFFLE8<LOPPER_TARGET>(in2, _deshuffler02));
-    const auto out1 = VBITWISE_OR(VBITWISE_OR(VSHUFFLE8<LOPPER_TARGET>(in0, _deshuffler10),
-                                              VSHUFFLE8<LOPPER_TARGET>(in1, _deshuffler11)),
-                                  VSHUFFLE8<LOPPER_TARGET>(in2, _deshuffler12));
-    const auto out2 = VBITWISE_OR(VBITWISE_OR(VSHUFFLE8<LOPPER_TARGET>(in0, _deshuffler20),
-                                              VSHUFFLE8<LOPPER_TARGET>(in1, _deshuffler21)),
-                                  VSHUFFLE8<LOPPER_TARGET>(in2, _deshuffler22));
-    return std::make_tuple(VCAST_FLOAT<LOPPER_TARGET>(out0), VCAST_FLOAT<LOPPER_TARGET>(out1), VCAST_FLOAT<LOPPER_TARGET>(out2));
-  } else if (num_lanes == 8u) {
-    // Go from [R0 G0 B0 R1 G1 B1 R2 G2] [B2 R3 G3 B3 R4 G4 B4 R5] [G5 B5 R6 G6 B6 R7 G7 B7]
-    // to [R0..R7] [G0..G7] [B0..B7]
-    // Extract the appropriate channels from input vectors, using bitwise masks.
-    const auto mask0 = VSET4x8<LOPPER_TARGET>(-1, 0, 0, -1, 0, 0, -1, 0);
-    const auto mask1 = VSET4x8<LOPPER_TARGET>(0, -1, 0, 0, -1, 0, 0, -1);
-    const auto mask2 = VSET4x8<LOPPER_TARGET>(0, 0, -1, 0, 0, -1, 0, 0);
-    const auto tmp0 = VBITWISE_OR(VBITWISE_OR(VBITWISE_AND(mask0, in0), VBITWISE_AND(mask1, in1)), VBITWISE_AND(mask2, in2));
-    const auto tmp1 = VBITWISE_OR(VBITWISE_OR(VBITWISE_AND(mask0, in2), VBITWISE_AND(mask1, in0)), VBITWISE_AND(mask2, in1));
-    const auto tmp2 = VBITWISE_OR(VBITWISE_OR(VBITWISE_AND(mask0, in1), VBITWISE_AND(mask1, in2)), VBITWISE_AND(mask2, in0));
-    // At this point, we should have:
-    //  tmp0 = R0 R3 R6 R1 R4 R7 R2 R5
-    //  tmp1 = G5 G0 G3 G6 G1 G4 G7 G2
-    //  tmp2 = B2 B5 B0 B3 B6 B1 B4 B7
-    return std::make_tuple(VCAST_FLOAT<LOPPER_TARGET>(VSHUFFLE32<LOPPER_TARGET>(tmp0, VSET4x8<LOPPER_TARGET>(0, 3, 6, 1, 4, 7, 2, 5))),
-                           VCAST_FLOAT<LOPPER_TARGET>(VSHUFFLE32<LOPPER_TARGET>(tmp1, VSET4x8<LOPPER_TARGET>(1, 4, 7, 2, 5, 0, 3, 6))),
-                           VCAST_FLOAT<LOPPER_TARGET>(VSHUFFLE32<LOPPER_TARGET>(tmp2, VSET4x8<LOPPER_TARGET>(2, 5, 0, 3, 6, 1, 4, 7))));
+// On ARM Neon, there's no native cast between int and float vectors, so we provide one.
+template<typename T> struct VCASTHelper {};
+template<> struct VCASTHelper<int32_t> {
+  template<typename T> inline static typename InstructionSetTrait<LOPPER_TARGET>::INT32 cast(T op1) {
+    return VCAST_INT32<LOPPER_TARGET>(op1);
   }
-}
+};
+template<> struct VCASTHelper<float> {
+  template<typename T> inline static typename InstructionSetTrait<LOPPER_TARGET>::FLOAT cast(T op1) {
+    return VCAST_FLOAT<LOPPER_TARGET>(op1);
+  }
+};
+
+template<> struct _DataLoader<4, 1> {
+  inline static constexpr size_t bytesPerOp() { return LOPPER_BITWIDTH >> 3; }
+  template<typename T> inline static MultipleIO<T, LOPPER_TARGET> load(const T* ptr) {
+    return VLOAD<LOPPER_TARGET>(ptr);
+  }
+};
+
+template<> struct _DataLoader<4, 3> {
+  inline static constexpr size_t bytesPerOp() { return (LOPPER_BITWIDTH >> 3) * 3; }
+  template<typename T> inline static MultipleIOTuple<T, 3, LOPPER_TARGET> load(const T* ptr) {
+    constexpr size_t num_lanes = InstructionSetTrait<LOPPER_TARGET>::num_lanes;
+    const auto in0 = VCAST_INT32<LOPPER_TARGET>(VLOAD<LOPPER_TARGET>(ptr));
+    const auto in1 = VCAST_INT32<LOPPER_TARGET>(VLOAD<LOPPER_TARGET>(ptr + num_lanes));
+    const auto in2 = VCAST_INT32<LOPPER_TARGET>(VLOAD<LOPPER_TARGET>(ptr + (num_lanes << 1)));
+    if (num_lanes == 4u) {
+      // We want to go from [R0 G0 B0 R1] [G1 B1 R2 G2] [B2 R3 G3 B3] to [R0..R3] [G0..G3] [B0..B3]
+      const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler00
+        = VSET8x16<LOPPER_TARGET>(0, 1, 2, 3, 12, 13, 14, 15, 128, 128, 128, 128, 128, 128, 128, 128);
+      const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler01
+        = VSET8x16<LOPPER_TARGET>(128, 128, 128, 128, 128, 128, 128, 128, 8, 9, 10, 11, 128, 128, 128, 128);
+      const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler02
+        = VSET8x16<LOPPER_TARGET>(128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 4, 5, 6, 7);
+      const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler10
+        = VSET8x16<LOPPER_TARGET>(4, 5, 6, 7, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128);
+      const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler11
+        = VSET8x16<LOPPER_TARGET>(128, 128, 128, 128, 0, 1, 2, 3, 12, 13, 14, 15, 128, 128, 128, 128);
+      const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler12
+        = VSET8x16<LOPPER_TARGET>(128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 8, 9, 10, 11);
+      const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler20
+        = VSET8x16<LOPPER_TARGET>(8, 9, 10, 11, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128);
+      const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler21
+        = VSET8x16<LOPPER_TARGET>(128, 128, 128, 128, 4, 5, 6, 7, 128, 128, 128, 128, 128, 128, 128, 128);
+      const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler22
+        = VSET8x16<LOPPER_TARGET>(128, 128, 128, 128, 128, 128, 128, 128, 0, 1, 2, 3, 12, 13, 14, 15);
+
+      const auto out0 = VBITWISE_OR(VBITWISE_OR(VSHUFFLE8<LOPPER_TARGET>(in0, _deshuffler00),
+                                                VSHUFFLE8<LOPPER_TARGET>(in1, _deshuffler01)),
+                                    VSHUFFLE8<LOPPER_TARGET>(in2, _deshuffler02));
+      const auto out1 = VBITWISE_OR(VBITWISE_OR(VSHUFFLE8<LOPPER_TARGET>(in0, _deshuffler10),
+                                                VSHUFFLE8<LOPPER_TARGET>(in1, _deshuffler11)),
+                                    VSHUFFLE8<LOPPER_TARGET>(in2, _deshuffler12));
+      const auto out2 = VBITWISE_OR(VBITWISE_OR(VSHUFFLE8<LOPPER_TARGET>(in0, _deshuffler20),
+                                                VSHUFFLE8<LOPPER_TARGET>(in1, _deshuffler21)),
+                                    VSHUFFLE8<LOPPER_TARGET>(in2, _deshuffler22));
+      return std::make_tuple(VCASTHelper<T>::cast(out0),
+                             VCASTHelper<T>::cast(out1),
+                             VCASTHelper<T>::cast(out2));
+    } else if (num_lanes == 8u) {
+      // Go from [R0 G0 B0 R1 G1 B1 R2 G2] [B2 R3 G3 B3 R4 G4 B4 R5] [G5 B5 R6 G6 B6 R7 G7 B7]
+      // to [R0..R7] [G0..G7] [B0..B7]
+      // Extract the appropriate channels from input vectors, using bitwise masks.
+      const auto mask0 = VSET4x8<LOPPER_TARGET>(-1, 0, 0, -1, 0, 0, -1, 0);
+      const auto mask1 = VSET4x8<LOPPER_TARGET>(0, -1, 0, 0, -1, 0, 0, -1);
+      const auto mask2 = VSET4x8<LOPPER_TARGET>(0, 0, -1, 0, 0, -1, 0, 0);
+      const auto tmp0 = VBITWISE_OR(VBITWISE_OR(VBITWISE_AND(mask0, in0), VBITWISE_AND(mask1, in1)), VBITWISE_AND(mask2, in2));
+      const auto tmp1 = VBITWISE_OR(VBITWISE_OR(VBITWISE_AND(mask0, in2), VBITWISE_AND(mask1, in0)), VBITWISE_AND(mask2, in1));
+      const auto tmp2 = VBITWISE_OR(VBITWISE_OR(VBITWISE_AND(mask0, in1), VBITWISE_AND(mask1, in2)), VBITWISE_AND(mask2, in0));
+      // At this point, we should have:
+      //  tmp0 = R0 R3 R6 R1 R4 R7 R2 R5
+      //  tmp1 = G5 G0 G3 G6 G1 G4 G7 G2
+      //  tmp2 = B2 B5 B0 B3 B6 B1 B4 B7
+      const auto out0 = VSHUFFLE32<LOPPER_TARGET>(tmp0, VSET4x8<LOPPER_TARGET>(0, 3, 6, 1, 4, 7, 2, 5));
+      const auto out1 = VSHUFFLE32<LOPPER_TARGET>(tmp1, VSET4x8<LOPPER_TARGET>(1, 4, 7, 2, 5, 0, 3, 6));
+      const auto out2 = VSHUFFLE32<LOPPER_TARGET>(tmp2, VSET4x8<LOPPER_TARGET>(2, 5, 0, 3, 6, 1, 4, 7));
+      return std::make_tuple(VCASTHelper<T>::cast(out0),
+                             VCASTHelper<T>::cast(out1),
+                             VCASTHelper<T>::cast(out2));
+    }
+  }
+};
+
+template<> struct _DataLoader<4, 4> {
+  inline static constexpr size_t bytesPerOp() { return LOPPER_BITWIDTH >> 1; }
+  template<typename T> inline static MultipleIOTuple<T, 4, LOPPER_TARGET> load(const T* ptr) {
+    constexpr size_t num_lanes = InstructionSetTrait<LOPPER_TARGET>::num_lanes;
+    const auto in0 = VCAST_INT32<LOPPER_TARGET>(VLOAD<LOPPER_TARGET>(ptr));
+    const auto in1 = VCAST_INT32<LOPPER_TARGET>(VLOAD<LOPPER_TARGET>(ptr + num_lanes));
+    const auto in2 = VCAST_INT32<LOPPER_TARGET>(VLOAD<LOPPER_TARGET>(ptr + (num_lanes << 1)));
+    const auto in3 = VCAST_INT32<LOPPER_TARGET>(VLOAD<LOPPER_TARGET>(ptr + (num_lanes * 3)));
+    const auto val02_lo = VINTERLEAVE32_LO(in0, in2);
+    const auto val02_hi = VINTERLEAVE32_HI(in0, in2);
+    const auto val13_lo = VINTERLEAVE32_LO(in1, in3);
+    const auto val13_hi = VINTERLEAVE32_HI(in1, in3);
+    if (num_lanes == 4u) {
+      // R0 R2 G0 G2 | B0 B2 A0 A2 | R1 R3 G1 G3 | B1 B3 A1 A3
+      const auto out0 = VINTERLEAVE32_LO(val02_lo, val13_lo);
+      const auto out1 = VINTERLEAVE32_HI(val02_lo, val13_lo);
+      const auto out2 = VINTERLEAVE32_LO(val02_hi, val13_hi);
+      const auto out3 = VINTERLEAVE32_HI(val02_hi, val13_hi);
+      return std::make_tuple(VCASTHelper<T>::cast(out0),
+                             VCASTHelper<T>::cast(out1),
+                             VCASTHelper<T>::cast(out2),
+                             VCASTHelper<T>::cast(out3));
+    } else if (num_lanes == 8u) {
+      // R0 R4 G0 G4 B0 B4 A0 A4 | R1 R5 G1 G5 B1 B5 A1 A5 | R2 R6 G2 G6 ...
+      const auto tmp0 = VINTERLEAVE32_LO(val02_lo, val13_lo); // R0 R2 R4 R6 G0 G2 G4 G6
+      const auto tmp1 = VINTERLEAVE32_HI(val02_lo, val13_lo); // B0 B2 B4 B6 A0 A2 A4 A6
+      const auto tmp2 = VINTERLEAVE32_LO(val02_hi, val13_hi); // R1 R3 R5 R7 ...
+      const auto tmp3 = VINTERLEAVE32_HI(val02_hi, val13_hi); // ...
+      const auto out0 = VINTERLEAVE32_LO(tmp0, tmp2);
+      const auto out1 = VINTERLEAVE32_HI(tmp0, tmp2);
+      const auto out2 = VINTERLEAVE32_LO(tmp1, tmp3);
+      const auto out3 = VINTERLEAVE32_HI(tmp1, tmp3);
+      return std::make_tuple(VCASTHelper<T>::cast(out0),
+                             VCASTHelper<T>::cast(out1),
+                             VCASTHelper<T>::cast(out2),
+                             VCASTHelper<T>::cast(out3));
+    }
+  }
+};
 #endif
 
 /*=============================== Machinery for writing pixels ===============================*/
@@ -423,6 +446,22 @@ template<> inline void _PixelStorer<LOPPER_TARGET>::store3<int32_t>(int32_t* ptr
   }
 }
 
+template<> inline void _PixelStorer<LOPPER_TARGET>::store4<int32_t>(int32_t* ptr,
+                                                                    const Multiple<int32_t, LOPPER_TARGET>& val0,
+                                                                    const Multiple<int32_t, LOPPER_TARGET>& val1,
+                                                                    const Multiple<int32_t, LOPPER_TARGET>& val2,
+                                                                    const Multiple<int32_t, LOPPER_TARGET>& val3) {
+  constexpr size_t num_lanes = InstructionSetTrait<LOPPER_TARGET>::num_lanes;
+  const auto val02_lo = VINTERLEAVE32_LO(val0, val2);
+  const auto val02_hi = VINTERLEAVE32_HI(val0, val2);
+  const auto val13_lo = VINTERLEAVE32_LO(val1, val3);
+  const auto val13_hi = VINTERLEAVE32_HI(val1, val3);
+  VSTORE(ptr, VINTERLEAVE32_LO(val02_lo, val13_lo));
+  VSTORE(ptr + num_lanes, VINTERLEAVE32_HI(val02_lo, val13_lo));
+  VSTORE(ptr + (num_lanes << 1), VINTERLEAVE32_LO(val02_hi, val13_hi));
+  VSTORE(ptr + (num_lanes * 3), VINTERLEAVE32_HI(val02_hi, val13_hi));
+}
+
 template<> inline void _PixelStorer<LOPPER_TARGET>::store3<float>(float* ptr,
                                                                   const Multiple<float, LOPPER_TARGET>& val0,
                                                                   const Multiple<float, LOPPER_TARGET>& val1,
@@ -432,6 +471,19 @@ template<> inline void _PixelStorer<LOPPER_TARGET>::store3<float>(float* ptr,
                                                VCAST_INT32<LOPPER_TARGET>(val1),
                                                VCAST_INT32<LOPPER_TARGET>(val2));
 }
+
+template<> inline void _PixelStorer<LOPPER_TARGET>::store4<float>(float* ptr,
+                                                                  const Multiple<float, LOPPER_TARGET>& val0,
+                                                                  const Multiple<float, LOPPER_TARGET>& val1,
+                                                                  const Multiple<float, LOPPER_TARGET>& val2,
+                                                                  const Multiple<float, LOPPER_TARGET>& val3) {
+  _PixelStorer<LOPPER_TARGET>::store4<int32_t>(reinterpret_cast<int32_t*>(ptr),
+                                               VCAST_INT32<LOPPER_TARGET>(val0),
+                                               VCAST_INT32<LOPPER_TARGET>(val1),
+                                               VCAST_INT32<LOPPER_TARGET>(val2),
+                                               VCAST_INT32<LOPPER_TARGET>(val3));
+}
+
 #endif
 
 /*=============================== Expressions for writing memory ===============================*/
