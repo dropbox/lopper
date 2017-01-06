@@ -56,6 +56,26 @@
 #define DEC_37 36
 #define DEC_38 37
 #define DEC_39 38
+#define DEC_40 39
+#define DEC_41 40
+#define DEC_42 41
+#define DEC_43 42
+#define DEC_44 43
+#define DEC_45 44
+#define DEC_46 45
+#define DEC_47 46
+#define DEC_48 47
+#define DEC_49 48
+#define DEC_50 49
+#define DEC_51 50
+#define DEC_52 51
+#define DEC_53 52
+#define DEC_54 53
+#define DEC_55 54
+#define DEC_56 55
+#define DEC_57 56
+#define DEC_58 57
+#define DEC_59 58
 #define DECREMENT(X) MACRO_COMBINER(DEC_, X)
 
 #define CURRENT_DEPINFO(UID) MACRO_COMBINER(reserved_depinfo, UID)

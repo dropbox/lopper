@@ -373,106 +373,99 @@ TYPED_TEST_P(LopperTypedTest, TwoChannelTest) {
   }
 }
 
-template<typename T, bool useSIMD> void _threeChannelTestHelper() {
+template<typename T, size_t C, bool useSIMD> void _multiChannelTestHelper() {
   srand(0);
-  Image<T> in(3, 100, 100);
+  Image<T> in(C, 100, 100);
   for (int y = 0; y < in.getHeight(); y++) {
     for (int x = 0; x < in.getWidth(); x++) {
-      in(x, y, 0) = rand() % 256;
-      in(x, y, 1) = rand() % 256;
-      in(x, y, 2) = rand() % 256;
+      for (size_t c = 0; c < C; c++) {
+        in(x, y, c) = rand() % 256;
+      }
     }
   }
-  { // Try computing (R + G * B) * 2
+  { // Try computing an expression.
     typedef typename std::conditional<std::is_same<T, float>::value, float, int32_t>::type T_out;
-    Image<T_out> out(1, 100, 100);
-    ExprPrepareContext();
-    auto rgb = ExprCache(Expr<3>(in));
-    auto r = rgb.template get<0>();
-    auto g = rgb.template get<1>();
-    auto b = rgb.template get<2>();
-    auto tmp = ExprCache(r + (g * b));
-    ExprEvalWithContextSIMD(useSIMD, Expr<1>(out) = tmp + tmp);
+    Image<T_out> out(1, in.getWidth(), in.getHeight());
+    switch (C) {
+    case 3: {
+      ExprPrepareContext();
+      auto rgb = ExprCache(Expr<3>(in));
+      auto r = rgb.template get<0>();
+      auto g = rgb.template get<1>();
+      auto b = rgb.template get<2>();
+      auto tmp = ExprCache(r + (g * 2) + (b * 3));
+      ExprEvalWithContextSIMD(useSIMD, Expr<1>(out) = tmp + tmp);
+      break;
+    }
+    case 4: {
+      ExprPrepareContext();
+      auto rgba = ExprCache(Expr<4>(in));
+      auto r = rgba.template get<0>();
+      auto g = rgba.template get<1>();
+      auto b = rgba.template get<2>();
+      auto a = rgba.template get<3>();
+      auto tmp = ExprCache(r + (g * 2) + (b * 3) + (a * 4));
+      ExprEvalWithContextSIMD(useSIMD, Expr<1>(out) = tmp + tmp);
+      break;
+    }
+    default:
+      ASSERT_TRUE(false);
+    }
     for (int y = 0; y < in.getHeight(); y++) {
       for (int x = 0; x < in.getWidth(); x++) {
-        int32_t r = in(x, y, 0);
-        int32_t g = in(x, y, 1);
-        int32_t b = in(x, y, 2);
-        ASSERT_EQ((r + g * b) * 2, out(x, y, 0));
+        int32_t tmp = 0;
+        for (size_t c = 0; c < C; c++) {
+          tmp += in(x, y, c) * (c + 1);
+        }
+        ASSERT_EQ(tmp + tmp, out(x, y, 0));
       }
     }
   }
   { // Try shuffling the channels
-    Image<T> out(3, 100, 100);
-    ExprPrepareContext();
-    auto rgb = ExprCache(Expr<3>(in));
-    auto r = rgb.template get<0>();
-    auto g = rgb.template get<1>();
-    auto b = rgb.template get<2>();
-    ExprEvalWithContextSIMD(useSIMD, Expr<3>(out) = std::make_tuple(g, b, r));
+    Image<T> out(C, in.getWidth(), in.getHeight());
+    switch (C) {
+    case 3: {
+      ExprPrepareContext();
+      auto rgb = ExprCache(Expr<3>(in));
+      auto r = rgb.template get<0>();
+      auto g = rgb.template get<1>();
+      auto b = rgb.template get<2>();
+      ExprEvalWithContextSIMD(useSIMD, Expr<3>(out) = std::make_tuple(g, b, r));
+      break;
+    }
+    case 4: {
+      ExprPrepareContext();
+      auto rgba = ExprCache(Expr<4>(in));
+      auto r = rgba.template get<0>();
+      auto g = rgba.template get<1>();
+      auto b = rgba.template get<2>();
+      auto a = rgba.template get<3>();
+      ExprEvalWithContextSIMD(useSIMD, Expr<4>(out) = std::make_tuple(g, b, a, r));
+      break;
+    }
+    default:
+      ASSERT_TRUE(false);
+    }
     for (int y = 0; y < in.getHeight(); y++) {
       for (int x = 0; x < in.getWidth(); x++) {
-        ASSERT_EQ(in(x, y, 1), out(x, y, 0));
-        ASSERT_EQ(in(x, y, 2), out(x, y, 1));
-        ASSERT_EQ(in(x, y, 0), out(x, y, 2));
+        for (size_t c = 0; c < C; c++) {
+          ASSERT_EQ(in(x, y, (c + 1) % C), out(x, y, c));
+        }
       }
     }
   }
 }
 
 TYPED_TEST_P(LopperTypedTest, ThreeChannelTest) {
-  _threeChannelTestHelper<uint8_t, TypeParam::value>();
-  _threeChannelTestHelper<int32_t, TypeParam::value>();
-  _threeChannelTestHelper<float, TypeParam::value>();
+  _multiChannelTestHelper<uint8_t, 3, TypeParam::value>();
+  _multiChannelTestHelper<int32_t, 3, TypeParam::value>();
+  _multiChannelTestHelper<float, 3, TypeParam::value>();
 }
 
 TYPED_TEST_P(LopperTypedTest, FourChannelTest) {
-  Image<uint8_t> in(4, 100, 100);
-  for (int y = 0; y < in.getHeight(); y++) {
-    for (int x = 0; x < in.getWidth(); x++) {
-      in(x, y, 0) = 212;
-      in(x, y, 1) = 234;
-      in(x, y, 2) = 219;
-      in(x, y, 3) = 178;
-    }
-  }
-  { // Try computing R + G * B - A
-    Image<int32_t> out(1, 100, 100);
-    ExprPrepareContext();
-    auto rgba = ExprCache(Expr<4>(in));
-    auto r = rgba.get<0>();
-    auto g = rgba.get<1>();
-    auto b = rgba.get<2>();
-    auto a = rgba.get<3>();
-    ExprEvalWithContextSIMD(TypeParam::value, Expr<1>(out) = r + (g * b) - a);
-    for (int y = 0; y < in.getHeight(); y++) {
-      for (int x = 0; x < in.getWidth(); x++) {
-        int32_t r = in(x, y, 0);
-        int32_t g = in(x, y, 1);
-        int32_t b = in(x, y, 2);
-        int32_t a = in(x, y, 3);
-        ASSERT_EQ(r + g * b - a, out(x, y, 0));
-      }
-    }
-  }
-  { // Try shuffling the channels
-    Image<uint8_t> out(4, 100, 100);
-    ExprPrepareContext();
-    auto rgba = ExprCache(Expr<4>(in));
-    auto r = rgba.get<0>();
-    auto g = rgba.get<1>();
-    auto b = rgba.get<2>();
-    auto a = rgba.get<3>();
-    ExprEvalWithContextSIMD(TypeParam::value, Expr<4>(out) = std::make_tuple(g, r, a, b));
-    for (int y = 0; y < in.getHeight(); y++) {
-      for (int x = 0; x < in.getWidth(); x++) {
-        ASSERT_EQ(in(x, y, 1), out(x, y, 0));
-        ASSERT_EQ(in(x, y, 0), out(x, y, 1));
-        ASSERT_EQ(in(x, y, 3), out(x, y, 2));
-        ASSERT_EQ(in(x, y, 2), out(x, y, 3));
-      }
-    }
-  }
+  _multiChannelTestHelper<uint8_t, 4, TypeParam::value>();
+  _multiChannelTestHelper<int32_t, 4, TypeParam::value>();
+  _multiChannelTestHelper<float, 4, TypeParam::value>();
 }
 
 TYPED_TEST_P(LopperTypedTest, RerunTest) {

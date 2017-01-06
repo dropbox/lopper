@@ -87,7 +87,9 @@ namespace lopper {
     return VSHUFFLE8<S>(op1, index);  // Preserve old behavior.
   }
   template<InstructionSet S> SFLOAT VCAST_FLOAT(SINT32 op1);
+  template<InstructionSet S> SFLOAT VCAST_FLOAT(SFLOAT op1) { return op1; }
   template<InstructionSet S> SINT32 VCAST_INT32(SFLOAT op1);
+  template<InstructionSet S> SINT32 VCAST_INT32(SINT32 op1) { return op1; }
 }
 
 /*======================================================*/
