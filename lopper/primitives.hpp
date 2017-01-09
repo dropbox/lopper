@@ -43,7 +43,7 @@ namespace lopper {
   // Set all lanes of the vector to the given value.
   template<InstructionSet S> SFLOAT VSET(float op);
   template<InstructionSet S> SINT32 VSET(int32_t op);
-  template<InstructionSet S> SINT32 VSET8(uint8_t op) {
+  template<InstructionSet S> inline SINT32 VSET8(uint8_t op) {
     return VSET<S>(op * 0x01010101);
   }
   // Set the first n bytes of the vector. If any argument that overflows the vector is ignored.
@@ -56,8 +56,8 @@ namespace lopper {
   template<InstructionSet S> SFLOAT VTO_FLOAT(SINT32 op1);
   template<InstructionSet S> SINT32 VTO_INT32(SFLOAT op1);
   template<InstructionSet S, size_t I> typename std::enable_if<I < 4u, SINT32>::type VEXPAND_QTR(SINT32 op);
-  template<InstructionSet S, size_t I> typename std::enable_if<InstructionSetTrait<S>::num_lanes == 4u &&
-                                                               I < 4u, SINT32>::type VEXPAND_BYTE(SINT32 op) {
+  template<InstructionSet S, size_t I> inline typename std::enable_if<InstructionSetTrait<S>::num_lanes == 4u &&
+                                                                      I < 4u, SINT32>::type VEXPAND_BYTE(SINT32 op) {
     return VEXPAND_QTR<S, I>(op);
   }
   template<InstructionSet S> SINT32 VCOLLAPSE_TO_BYTES(SINT32 op1, SINT32 op2, SINT32 op3, SINT32 op4);
@@ -83,7 +83,7 @@ namespace lopper {
   template<InstructionSet S> SINT32 VSHUFFLE8(SINT32 op1, SINT32 index);
   template<InstructionSet S> SINT32 VSHUFFLE32(SINT32 op1, SINT32 index);
   // NOTE: VSHUFFLE should be deprecated in the future to avoid confusion.
-  template<InstructionSet S> SINT32 VSHUFFLE(SINT32 op1, SINT32 index) {
+  template<InstructionSet S> inline SINT32 VSHUFFLE(SINT32 op1, SINT32 index) {
     return VSHUFFLE8<S>(op1, index);  // Preserve old behavior.
   }
   template<InstructionSet S> SFLOAT VCAST_FLOAT(SINT32 op1);
