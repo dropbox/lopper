@@ -116,6 +116,45 @@ TYPED_TEST_P(LopperTypedPrimitiveTest, LoadUInt8IntoInt32Test) {
   }
 }
 
+template<typename T, size_t C, typename TypeParam> void _MultiStoreTestHelper() {
+  T buffer_in[C][(TypeParam::bitwidth / 8 / sizeof(T))];
+  for (size_t i = 0; i < TypeParam::bitwidth / 8 / sizeof(T); i++) {
+    for (size_t c = 0; c < C; c++) {
+      buffer_in[c][i] = ((i+0+10*c) | ((i+1+10*c) << 8) | ((i+2+10*c) << 16) | ((i+3+10*c) << 24));
+    }
+  }
+  T buffer_out[(TypeParam::bitwidth / 8 / sizeof(T)) * C];
+  switch (C) {
+  case 3:
+    VSTORE3(buffer_out,
+            VLOAD<TypeParam::value>(buffer_in[0%C]),
+            VLOAD<TypeParam::value>(buffer_in[1%C]),
+            VLOAD<TypeParam::value>(buffer_in[2%C]));
+    break;
+  case 4:
+    VSTORE4(buffer_out,
+            VLOAD<TypeParam::value>(buffer_in[0%C]),
+            VLOAD<TypeParam::value>(buffer_in[1%C]),
+            VLOAD<TypeParam::value>(buffer_in[2%C]),
+            VLOAD<TypeParam::value>(buffer_in[3%C]));
+    break;
+  default:
+    ASSERT_FALSE(true);
+  }
+  for (size_t i = 0; i < TypeParam::bitwidth / 8 / sizeof(T); i++) {
+    for (size_t c = 0; c < C; c++) {
+      ASSERT_EQ(buffer_in[c][i], buffer_out[i*C+c]);
+    }
+  }
+}
+
+TYPED_TEST_P(LopperTypedPrimitiveTest, MultiStoreTest) {
+  _MultiStoreTestHelper<uint8_t, 3, TypeParam>();
+  _MultiStoreTestHelper<uint8_t, 4, TypeParam>();
+  _MultiStoreTestHelper<int32_t, 3, TypeParam>();
+  _MultiStoreTestHelper<int32_t, 4, TypeParam>();
+}
+
 // A macro for checking SIMD and serial behaviors against each other
 #define VERIFY_ARITHMETIC_OP(OP, arg1, arg2, output)                                         \
   for (size_t i = 0; i < 8; i += TypeParam::num_lanes) {                                     \
@@ -435,6 +474,7 @@ REGISTER_TYPED_TEST_CASE_P(LopperTypedPrimitiveTest,
                            ExponentiationTest,
                            LoadTest,
                            LoadUInt8IntoInt32Test,
+                           MultiStoreTest,
                            FloatingPointMath,
                            IntegerMath,
                            BitMath,

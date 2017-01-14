@@ -401,49 +401,7 @@ template<> inline void _PixelStorer<LOPPER_TARGET>::store3<int32_t>(int32_t* ptr
                                                                     const Multiple<int32_t, LOPPER_TARGET>& val0,
                                                                     const Multiple<int32_t, LOPPER_TARGET>& val1,
                                                                     const Multiple<int32_t, LOPPER_TARGET>& val2) {
-  constexpr size_t num_lanes = InstructionSetTrait<LOPPER_TARGET>::num_lanes;
-  if (num_lanes == 4u) {
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler0 =
-      VSET8x16<LOPPER_TARGET>(0, 1, 2, 3, 128, 128, 128, 128, 128, 128, 128, 128, 4, 5, 6, 7);
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler1 =
-      VSET8x16<LOPPER_TARGET>(128, 128, 128, 128, 0, 1, 2, 3, 128, 128, 128, 128, 128, 128, 128, 128);
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler2 =
-      VSET8x16<LOPPER_TARGET>(128, 128, 128, 128, 128, 128, 128, 128, 0, 1, 2, 3, 128, 128, 128, 128);
-    // Write out the first 16 bytes.
-    auto out0 = VBITWISE_OR(VBITWISE_OR(VSHUFFLE<LOPPER_TARGET>(val0, _deshuffler0),
-                                        VSHUFFLE<LOPPER_TARGET>(val1, _deshuffler1)),
-                            VSHUFFLE<LOPPER_TARGET>(val2, _deshuffler2));
-    VSTORE(ptr, out0);
-    // Write out the second 16 bytes.
-    auto out1 = VBITWISE_OR(VBITWISE_OR(VSHUFFLE<LOPPER_TARGET>(val1, VADD(VSET8<LOPPER_TARGET>(4), _deshuffler0)),
-                                        VSHUFFLE<LOPPER_TARGET>(val2, VADD(VSET8<LOPPER_TARGET>(4), _deshuffler1))),
-                            VSHUFFLE<LOPPER_TARGET>(val0, VADD(VSET8<LOPPER_TARGET>(8), _deshuffler2)));
-    VSTORE(ptr + 4, out1);
-    // Write out the third 16 bytes.
-    auto out2 = VBITWISE_OR(VBITWISE_OR(VSHUFFLE<LOPPER_TARGET>(val2, VADD(VSET8<LOPPER_TARGET>(8), _deshuffler0)),
-                                        VSHUFFLE<LOPPER_TARGET>(val0, VADD(VSET8<LOPPER_TARGET>(12), _deshuffler1))),
-                            VSHUFFLE<LOPPER_TARGET>(val1, VADD(VSET8<LOPPER_TARGET>(12), _deshuffler2)));
-    VSTORE(ptr + 8, out2);
-  } else if (num_lanes == 8u) {
-    // From [R0...R7] [G0...G7] [B0...B7] to [R0 G0 B0 ...]
-    const auto deshuffler0 = VSET4x8<LOPPER_TARGET>(0, 3, 6, 1, 4, 7, 2, 5);
-    const auto deshuffler1 = VSET4x8<LOPPER_TARGET>(5, 0, 3, 6, 1, 4, 7, 2);
-    const auto deshuffler2 = VSET4x8<LOPPER_TARGET>(2, 5, 0, 3, 6, 1, 4, 7);
-
-    const auto tmp0 = VSHUFFLE32<LOPPER_TARGET>(val0, deshuffler0);
-    const auto tmp1 = VSHUFFLE32<LOPPER_TARGET>(val1, deshuffler1);
-    const auto tmp2 = VSHUFFLE32<LOPPER_TARGET>(val2, deshuffler2);
-
-    const auto mask0 = VSET4x8<LOPPER_TARGET>(-1, 0, 0, -1, 0, 0, -1, 0);
-    const auto mask1 = VSET4x8<LOPPER_TARGET>(0, -1, 0, 0, -1, 0, 0, -1);
-
-    // Write first 32 bytes [R0 G0 B0 R1 G1 B1 R2 G2]
-    VSTORE(ptr, VSELECT<LOPPER_TARGET>(mask0, VSELECT<LOPPER_TARGET>(mask1, tmp2, tmp1), tmp0));
-    // Write second 32 bytes [B2 R3 G3 B3 R4 G4 B4 R5]
-    VSTORE(ptr + 8, VSELECT<LOPPER_TARGET>(mask0, VSELECT<LOPPER_TARGET>(mask1, tmp1, tmp0), tmp2));
-    // Write third 32 bytes [G5 B5 R6 G6 B6 R7 G7 B7]
-    VSTORE(ptr + 16, VSELECT<LOPPER_TARGET>(mask0, VSELECT<LOPPER_TARGET>(mask1, tmp0, tmp2), tmp1));
-  }
+  VSTORE3(ptr, val0, val1, val2);
 }
 
 template<> inline void _PixelStorer<LOPPER_TARGET>::store4<int32_t>(int32_t* ptr,
@@ -451,15 +409,7 @@ template<> inline void _PixelStorer<LOPPER_TARGET>::store4<int32_t>(int32_t* ptr
                                                                     const Multiple<int32_t, LOPPER_TARGET>& val1,
                                                                     const Multiple<int32_t, LOPPER_TARGET>& val2,
                                                                     const Multiple<int32_t, LOPPER_TARGET>& val3) {
-  constexpr size_t num_lanes = InstructionSetTrait<LOPPER_TARGET>::num_lanes;
-  const auto val02_lo = VINTERLEAVE32_LO(val0, val2);
-  const auto val02_hi = VINTERLEAVE32_HI(val0, val2);
-  const auto val13_lo = VINTERLEAVE32_LO(val1, val3);
-  const auto val13_hi = VINTERLEAVE32_HI(val1, val3);
-  VSTORE(ptr, VINTERLEAVE32_LO(val02_lo, val13_lo));
-  VSTORE(ptr + num_lanes, VINTERLEAVE32_HI(val02_lo, val13_lo));
-  VSTORE(ptr + (num_lanes << 1), VINTERLEAVE32_LO(val02_hi, val13_hi));
-  VSTORE(ptr + (num_lanes * 3), VINTERLEAVE32_HI(val02_hi, val13_hi));
+  VSTORE4(ptr, val0, val1, val2, val3);
 }
 
 template<> inline void _PixelStorer<LOPPER_TARGET>::store3<float>(float* ptr,

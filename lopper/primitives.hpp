@@ -34,6 +34,10 @@ namespace lopper {
   template<typename T> void VSTORE(float* addr, T op);
   template<typename T> void VSTORE(int32_t* addr, T op);
   template<typename T> void VSTORE(uint8_t* addr, T op);
+  template<typename T> void VSTORE3(int32_t* addr, T op1, T op2, T op3);
+  template<typename T> void VSTORE3(uint8_t* addr, T op1, T op2, T op3);
+  template<typename T> void VSTORE4(int32_t* addr, T op1, T op2, T op3, T op4);
+  template<typename T> void VSTORE4(uint8_t* addr, T op1, T op2, T op3, T op4);
   template<typename T> void VSTORE_ALIGNED(float* addr, T op) { VSTORE(addr, op); }
   template<typename T> void VSTORE_ALIGNED(int32_t* addr, T op) { VSTORE(addr, op); }
   template<typename T> void VSTORE_ALIGNED(uint8_t* addr, T op) { VSTORE(addr, op); }
@@ -93,6 +97,87 @@ namespace lopper {
 }
 
 /*======================================================*/
+//           Shared implementations
+//   (Primitives with common default implementations)
+/*======================================================*/
+namespace lopper {
+namespace {
+template<InstructionSet S> typename std::enable_if<InstructionSetTrait<S>::num_lanes == 4u>::type
+_VSTORE3(uint8_t* addr, SINT32 op1, SINT32 op2, SINT32 op3) {
+  const auto deshuffler1 =
+    VSET8x16<S>(0, 128, 128, 1, 128, 128, 2, 128, 128, 3, 128, 128, 4, 128, 128, 5);
+  const auto deshuffler2 =
+    VSET8x16<S>(128, 0, 128, 128, 1, 128, 128, 2, 128, 128, 3, 128, 128, 4, 128, 128);
+  const auto deshuffler3 =
+    VSET8x16<S>(128, 128, 0, 128, 128, 1, 128, 128, 2, 128, 128, 3, 128, 128, 4, 128);
+  VSTORE(addr, VBITWISE_OR(VBITWISE_OR(VSHUFFLE8<S>(op1, deshuffler1),
+                                       VSHUFFLE8<S>(op2, deshuffler2)),
+                           VSHUFFLE8<S>(op3, deshuffler3)));
+  VSTORE(addr + 16, VBITWISE_OR(VBITWISE_OR(VSHUFFLE8<S>(op2, VADD(deshuffler1, VSET8<S>(5))),
+                                            VSHUFFLE8<S>(op3, VADD(deshuffler2, VSET8<S>(5)))),
+                                VSHUFFLE8<S>(op1, VADD(deshuffler3, VSET8<S>(6)))));
+  VSTORE(addr + 32, VBITWISE_OR(VBITWISE_OR(VSHUFFLE8<S>(op3, VADD(deshuffler1, VSET8<S>(10))),
+                                            VSHUFFLE8<S>(op1, VADD(deshuffler2, VSET8<S>(11)))),
+                                VSHUFFLE8<S>(op2, VADD(deshuffler3, VSET8<S>(11)))));
+}
+template<InstructionSet S> typename std::enable_if<InstructionSetTrait<S>::num_lanes == 4u>::type
+_VSTORE3(int32_t* addr, SINT32 op1, SINT32 op2, SINT32 op3) {
+  const auto deshuffler1 =
+    VSET8x16<S>(0, 1, 2, 3, 128, 128, 128, 128, 128, 128, 128, 128, 4, 5, 6, 7);
+  const auto deshuffler2 =
+    VSET8x16<S>(128, 128, 128, 128, 0, 1, 2, 3, 128, 128, 128, 128, 128, 128, 128, 128);
+  const auto deshuffler3 =
+    VSET8x16<S>(128, 128, 128, 128, 128, 128, 128, 128, 0, 1, 2, 3, 128, 128, 128, 128);
+  // Write out the first 16 bytes.
+  VSTORE(addr, VBITWISE_OR(VBITWISE_OR(VSHUFFLE8<S>(op1, deshuffler1),
+                                       VSHUFFLE8<S>(op2, deshuffler2)),
+                           VSHUFFLE8<S>(op3, deshuffler3)));
+  // Write out the second 16 bytes.
+  VSTORE(addr + 4, VBITWISE_OR(VBITWISE_OR(VSHUFFLE8<S>(op2, VADD(VSET8<S>(4), deshuffler1)),
+                                           VSHUFFLE8<S>(op3, VADD(VSET8<S>(4), deshuffler2))),
+                               VSHUFFLE<S>(op1, VADD(VSET8<S>(8), deshuffler3))));
+  // Write out the third 16 bytes.
+  VSTORE(addr + 8, VBITWISE_OR(VBITWISE_OR(VSHUFFLE8<S>(op3, VADD(VSET8<S>(8), deshuffler1)),
+                                           VSHUFFLE8<S>(op1, VADD(VSET8<S>(12), deshuffler2))),
+                               VSHUFFLE8<S>(op2, VADD(VSET8<S>(12), deshuffler3))));
+}
+template<InstructionSet S> typename std::enable_if<InstructionSetTrait<S>::num_lanes == 8u>::type
+_VSTORE3(int32_t* addr, SINT32 op1, SINT32 op2, SINT32 op3) {
+  // From [R0...R7] [G0...G7] [B0...B7] to [R0 G0 B0 ...]
+  const auto deshuffler1 = VSET4x8<S>(0, 3, 6, 1, 4, 7, 2, 5);
+  const auto deshuffler2 = VSET4x8<S>(5, 0, 3, 6, 1, 4, 7, 2);
+  const auto deshuffler3 = VSET4x8<S>(2, 5, 0, 3, 6, 1, 4, 7);
+
+  const auto tmp1 = VSHUFFLE32<S>(op1, deshuffler1);
+  const auto tmp2 = VSHUFFLE32<S>(op2, deshuffler2);
+  const auto tmp3 = VSHUFFLE32<S>(op3, deshuffler3);
+
+  const auto mask0 = VSET4x8<S>(-1, 0, 0, -1, 0, 0, -1, 0);
+  const auto mask1 = VSET4x8<S>(0, -1, 0, 0, -1, 0, 0, -1);
+
+  // Write first 32 bytes [R0 G0 B0 R1 G1 B1 R2 G2]
+  VSTORE(addr, VSELECT<S>(mask0, VSELECT<S>(mask1, tmp3, tmp2), tmp1));
+  // Write second 32 bytes [B2 R3 G3 B3 R4 G4 B4 R5]
+  VSTORE(addr + 8, VSELECT<S>(mask0, VSELECT<S>(mask1, tmp2, tmp1), tmp3));
+  // Write third 32 bytes [G5 B5 R6 G6 B6 R7 G7 B7]
+  VSTORE(addr + 16, VSELECT<S>(mask0, VSELECT<S>(mask1, tmp1, tmp3), tmp2));
+}
+template<InstructionSet S> void _VSTORE4(int32_t* addr, SINT32 op1, SINT32 op2, SINT32 op3, SINT32 op4) {
+  constexpr size_t num_lanes = InstructionSetTrait<S>::num_lanes;
+  const auto op13_lo = VINTERLEAVE32_LO(op1, op3);
+  const auto op13_hi = VINTERLEAVE32_HI(op1, op3);
+  const auto op24_lo = VINTERLEAVE32_LO(op2, op4);
+  const auto op24_hi = VINTERLEAVE32_HI(op2, op4);
+  VSTORE(addr, VINTERLEAVE32_LO(op13_lo, op24_lo));
+  VSTORE(addr + num_lanes, VINTERLEAVE32_HI(op13_lo, op24_lo));
+  VSTORE(addr + (num_lanes << 1), VINTERLEAVE32_LO(op13_hi, op24_hi));
+  VSTORE(addr + (num_lanes * 3), VINTERLEAVE32_HI(op13_hi, op24_hi));
+}
+
+}
+}
+
+/*======================================================*/
 //           Inline implementation for SCALAR
 /*======================================================*/
 namespace lopper {
@@ -129,6 +214,29 @@ namespace lopper {
   template<> inline int32_t VINTERLEAVE32_HI(int32_t, int32_t op2) { return op2; }
   template<> inline void VSTORE(int32_t* addr, int32_t op) { addr[0] = op; }
   template<> inline void VSTORE(uint8_t* addr, int32_t op) { memcpy(addr, &op, sizeof(int32_t)); }
+  template<> inline void VSTORE3(int32_t* addr, int32_t op1, int32_t op2, int32_t op3) {
+    addr[0] = op1;
+    addr[1] = op2;
+    addr[2] = op3;
+  }
+  template<> inline void VSTORE3(uint8_t* addr, int32_t op1, int32_t op2, int32_t op3) {
+    addr[0] = op1 & 0xff; addr[1] = op2 & 0xff; addr[2] = op3 & 0xff;
+    addr[3] = (op1 >> 8) & 0xff; addr[4] = (op2 >> 8) & 0xff; addr[5] = (op3 >> 8) & 0xff;
+    addr[6] = (op1 >> 16) & 0xff; addr[7] = (op2 >> 16) & 0xff; addr[8] = (op3 >> 16) & 0xff;
+    addr[9] = (op1 >> 24) & 0xff; addr[10] = (op2 >> 24) & 0xff; addr[11] = (op3 >> 24) & 0xff;
+  }
+  template<> inline void VSTORE4(int32_t* addr, int32_t op1, int32_t op2, int32_t op3, int32_t op4) {
+    addr[0] = op1;
+    addr[1] = op2;
+    addr[2] = op3;
+    addr[3] = op4;
+  }
+  template<> inline void VSTORE4(uint8_t* addr, int32_t op1, int32_t op2, int32_t op3, int32_t op4) {
+    addr[0] = op1 & 0xff; addr[1] = op2 & 0xff; addr[2] = op3 & 0xff; addr[3] = op4 & 0xff;
+    addr[4] = (op1 >> 8) & 0xff; addr[5] = (op2 >> 8) & 0xff; addr[6] = (op3 >> 8) & 0xff; addr[7] = (op4 >> 8) & 0xff;
+    addr[8] = (op1 >> 16) & 0xff; addr[9] = (op2 >> 16) & 0xff; addr[10] = (op3 >> 16) & 0xff; addr[11] = (op4 >> 16) & 0xff;
+    addr[12] = (op1 >> 24) & 0xff; addr[13] = (op2 >> 24) & 0xff; addr[14] = (op3 >> 24) & 0xff; addr[15] = (op4 >> 24) & 0xff;
+  }
   template<> inline int32_t VLOAD<SCALAR>(const int32_t* addr) { return addr[0]; }
   template<> inline int32_t VLOAD<SCALAR>(const uint8_t* addr) {
     // NOTE(jongmin): One may be tempted to dereference the pointer as int32_t*, but this is actually illegal.
@@ -323,6 +431,25 @@ namespace lopper {
                               VLT<SSE>(index, VSET<SSE>(0)));
     return VSHUFFLE8<SSE>(op1, index8);
   }
+  template<> inline void VSTORE3(int32_t* addr, __m128i op1, __m128i op2, __m128i op3) {
+    _VSTORE3<SSE>(addr, op1, op2, op3);
+  }
+  template<> inline void VSTORE3(uint8_t* addr, __m128i op1, __m128i op2, __m128i op3) {
+    _VSTORE3<SSE>(addr, op1, op2, op3);
+  }
+  template<> inline void VSTORE4(int32_t* addr, __m128i op1, __m128i op2, __m128i op3, __m128i op4) {
+    _VSTORE4<SSE>(addr, op1, op2, op3, op4);
+  }
+  template<> inline void VSTORE4(uint8_t* addr, __m128i op1, __m128i op2, __m128i op3, __m128i op4) {
+    const auto op13_lo = _mm_unpacklo_epi8(op1, op3);
+    const auto op13_hi = _mm_unpackhi_epi8(op1, op3);
+    const auto op24_lo = _mm_unpacklo_epi8(op2, op4);
+    const auto op24_hi = _mm_unpackhi_epi8(op2, op4);
+    VSTORE(addr, _mm_unpacklo_epi8(op13_lo, op24_lo));
+    VSTORE(addr + 16, _mm_unpackhi_epi8(op13_lo, op24_lo));
+    VSTORE(addr + 32, _mm_unpacklo_epi8(op13_hi, op24_hi));
+    VSTORE(addr + 48, _mm_unpackhi_epi8(op13_hi, op24_hi));
+  }
 }
 #endif
 
@@ -389,6 +516,26 @@ namespace lopper {
   template<> inline void VSTORE_ALIGNED(uint8_t* addr, __m256i op) {
     VSTORE_ALIGNED(addr, _VLO(op));
     VSTORE_ALIGNED(addr + 16, _VHI(op));
+  }
+  template<> inline void VSTORE3(int32_t* addr, __m256i op1, __m256i op2, __m256i op3) {
+    // This is faster than using the shared implementation.
+    VSTORE3(addr, _VLO(op1), _VLO(op2), _VLO(op3));
+    VSTORE3(addr + 12, _VHI(op1), _VHI(op2), _VHI(op3));
+  }
+  template<> inline void VSTORE3(uint8_t* addr, __m256i op1, __m256i op2, __m256i op3) {
+    // This is faster than using the shared implementation.
+    VSTORE3(addr, _VLO(op1), _VLO(op2), _VLO(op3));
+    VSTORE3(addr + 48, _VHI(op1), _VHI(op2), _VHI(op3));
+  }
+  template<> inline void VSTORE4(int32_t* addr, __m256i op1, __m256i op2, __m256i op3, __m256i op4) {
+    // This is faster than using the shared implementation.
+    VSTORE4(addr, _VLO(op1), _VLO(op2), _VLO(op3), _VLO(op4));
+    VSTORE4(addr + 16, _VHI(op1), _VHI(op2), _VHI(op3), _VHI(op4));
+  }
+  template<> inline void VSTORE4(uint8_t* addr, __m256i op1, __m256i op2, __m256i op3, __m256i op4) {
+    // This is faster than using the shared implementation.
+    VSTORE4(addr, _VLO(op1), _VLO(op2), _VLO(op3), _VLO(op4));
+    VSTORE4(addr + 64, _VHI(op1), _VHI(op2), _VHI(op3), _VHI(op4));
   }
   template<> inline __m256i VLOAD<AVX>(const int32_t* addr) {
     return _VCONCAT(VLOAD<SSE>(addr), VLOAD<SSE>(addr + 4));
@@ -589,6 +736,19 @@ namespace lopper {
   template<> inline int32x4_t VABS(int32x4_t op1) { return vabsq_s32(op1); }
   template<> inline void VSTORE(int32_t* addr, int32x4_t op) { vst1q_s32(addr, op); }
   template<> inline void VSTORE(uint8_t* addr, int32x4_t op) { vst1q_u8(addr, vreinterpretq_u8_s32(op)); }
+  template<> inline void VSTORE3(int32_t* addr, int32x4_t op1, int32x4_t op2, int32x4_t op3) {
+    vst3q_s32(addr, {op1, op2, op3});
+  }
+  template<> inline void VSTORE3(uint8_t* addr, int32x4_t op1, int32x4_t op2, int32x4_t op3) {
+    vst3q_u8(addr, {vreinterpretq_u8_s32(op1), vreinterpretq_u8_s32(op2), vreinterpretq_u8_s32(op3)});
+  }
+  template<> inline void VSTORE4(int32_t* addr, int32x4_t op1, int32x4_t op2, int32x4_t op3, int32x4_t op4) {
+    vst4q_s32(addr, {op1, op2, op3, op4});
+  }
+  template<> inline void VSTORE4(uint8_t* addr, int32x4_t op1, int32x4_t op2, int32x4_t op3, int32x4_t op4) {
+    vst4q_u8(addr, {vreinterpretq_u8_s32(op1), vreinterpretq_u8_s32(op2),
+          vreinterpretq_u8_s32(op3), vreinterpretq_u8_s32(op4)});
+  }
   template<> inline int32x4_t VLOAD<NEON>(const int32_t* addr) { return vld1q_s32(addr); }
   template<> inline int32x4_t VLOAD<NEON>(const uint8_t* addr) { return vreinterpretq_s32_u8(vld1q_u8(addr)); }
   template<> inline int32x4_t VSET<NEON>(int32_t op) { return vmovq_n_s32(op); }
