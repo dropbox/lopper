@@ -1,5 +1,6 @@
 Lopper
 ======
+[![Build status](https://travis-ci.org/dropbox/lopper.svg?branch=master)](https://travis-ci.org/dropbox/lopper)
 
 Lopper is a lightweight C++ template meta-programming framework for making vectorizing image-processing code easy, synthesized during Dropbox's 2016 hack week. It was inspired by many (more general) predecessors like Eigen and Halide, but the core focus was in enabling precise control over inlining of primitive computation. It can target platforms that support SSE (4.2) or NEON instructions. Note that Lopper does some very naughty things, like placing variables on the stack without being explicit about it, so take care when using it.
 
