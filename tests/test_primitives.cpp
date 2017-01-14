@@ -116,43 +116,43 @@ TYPED_TEST_P(LopperTypedPrimitiveTest, LoadUInt8IntoInt32Test) {
   }
 }
 
-TYPED_TEST_P(LopperTypedPrimitiveTest, Store3Test) {
-  { // uint8_t test
-    uint8_t buffer_in[3][(TypeParam::bitwidth / 8)];
-    for (size_t i = 0; i < TypeParam::bitwidth / 8; i++) {
-      buffer_in[0][i] = (uint8_t)i;
-      buffer_in[1][i] = (uint8_t)(i + 100);
-      buffer_in[2][i] = (uint8_t)(i + 200);
-    }
-    uint8_t buffer_out[(TypeParam::bitwidth / 8) * 3];
-    VSTORE3(buffer_out,
-            VLOAD<TypeParam::value>(buffer_in[0]),
-            VLOAD<TypeParam::value>(buffer_in[1]),
-            VLOAD<TypeParam::value>(buffer_in[2]));
-    for (size_t i = 0; i < TypeParam::bitwidth / 8; i++) {
-      for (size_t c = 0; c < 3; c++) {
-        ASSERT_EQ(buffer_in[c][i], buffer_out[i*3+c]);
-      }
+template<typename T, size_t C, typename TypeParam> void _MultiStoreTestHelper() {
+  T buffer_in[C][(TypeParam::bitwidth / 8 / sizeof(T))];
+  for (size_t i = 0; i < TypeParam::bitwidth / 8 / sizeof(T); i++) {
+    for (size_t c = 0; c < C; c++) {
+      buffer_in[c][i] = ((i+0+10*c) | ((i+1+10*c) << 8) | ((i+2+10*c) << 16) | ((i+3+10*c) << 24));
     }
   }
-  { // int32_t test
-    int32_t buffer_in[3][(TypeParam::bitwidth / 32)];
-    for (size_t i = 0; i < TypeParam::bitwidth / 32; i++) {
-      buffer_in[0][i] = (i+0) | ((i+1) << 8) | ((i+2) << 16) | ((i+3) << 24);
-      buffer_in[1][i] = (i+10) | ((i+11) << 8) | ((i+12) << 16) | ((i+13) << 24);
-      buffer_in[2][i] = (i+20) | ((i+21) << 8) | ((i+22) << 16) | ((i+23) << 24);
-    }
-    int32_t buffer_out[(TypeParam::bitwidth / 32) * 3];
+  T buffer_out[(TypeParam::bitwidth / 8 / sizeof(T)) * C];
+  switch (C) {
+  case 3:
     VSTORE3(buffer_out,
-            VLOAD<TypeParam::value>(buffer_in[0]),
-            VLOAD<TypeParam::value>(buffer_in[1]),
-            VLOAD<TypeParam::value>(buffer_in[2]));
-    for (size_t i = 0; i < TypeParam::bitwidth / 32; i++) {
-      for (size_t c = 0; c < 3; c++) {
-        ASSERT_EQ(buffer_in[c][i], buffer_out[i*3+c]);
-      }
+            VLOAD<TypeParam::value>(buffer_in[0%C]),
+            VLOAD<TypeParam::value>(buffer_in[1%C]),
+            VLOAD<TypeParam::value>(buffer_in[2%C]));
+    break;
+  case 4:
+    VSTORE4(buffer_out,
+            VLOAD<TypeParam::value>(buffer_in[0%C]),
+            VLOAD<TypeParam::value>(buffer_in[1%C]),
+            VLOAD<TypeParam::value>(buffer_in[2%C]),
+            VLOAD<TypeParam::value>(buffer_in[3%C]));
+    break;
+  default:
+    ASSERT_FALSE(true);
+  }
+  for (size_t i = 0; i < TypeParam::bitwidth / 8 / sizeof(T); i++) {
+    for (size_t c = 0; c < C; c++) {
+      ASSERT_EQ(buffer_in[c][i], buffer_out[i*C+c]);
     }
   }
+}
+
+TYPED_TEST_P(LopperTypedPrimitiveTest, MultiStoreTest) {
+  _MultiStoreTestHelper<uint8_t, 3, TypeParam>();
+  _MultiStoreTestHelper<uint8_t, 4, TypeParam>();
+  _MultiStoreTestHelper<int32_t, 3, TypeParam>();
+  _MultiStoreTestHelper<int32_t, 4, TypeParam>();
 }
 
 // A macro for checking SIMD and serial behaviors against each other
@@ -474,7 +474,7 @@ REGISTER_TYPED_TEST_CASE_P(LopperTypedPrimitiveTest,
                            ExponentiationTest,
                            LoadTest,
                            LoadUInt8IntoInt32Test,
-                           Store3Test,
+                           MultiStoreTest,
                            FloatingPointMath,
                            IntegerMath,
                            BitMath,

@@ -409,15 +409,7 @@ template<> inline void _PixelStorer<LOPPER_TARGET>::store4<int32_t>(int32_t* ptr
                                                                     const Multiple<int32_t, LOPPER_TARGET>& val1,
                                                                     const Multiple<int32_t, LOPPER_TARGET>& val2,
                                                                     const Multiple<int32_t, LOPPER_TARGET>& val3) {
-  constexpr size_t num_lanes = InstructionSetTrait<LOPPER_TARGET>::num_lanes;
-  const auto val02_lo = VINTERLEAVE32_LO(val0, val2);
-  const auto val02_hi = VINTERLEAVE32_HI(val0, val2);
-  const auto val13_lo = VINTERLEAVE32_LO(val1, val3);
-  const auto val13_hi = VINTERLEAVE32_HI(val1, val3);
-  VSTORE(ptr, VINTERLEAVE32_LO(val02_lo, val13_lo));
-  VSTORE(ptr + num_lanes, VINTERLEAVE32_HI(val02_lo, val13_lo));
-  VSTORE(ptr + (num_lanes << 1), VINTERLEAVE32_LO(val02_hi, val13_hi));
-  VSTORE(ptr + (num_lanes * 3), VINTERLEAVE32_HI(val02_hi, val13_hi));
+  VSTORE4(ptr, val0, val1, val2, val3);
 }
 
 template<> inline void _PixelStorer<LOPPER_TARGET>::store3<float>(float* ptr,
