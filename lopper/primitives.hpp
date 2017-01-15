@@ -34,8 +34,10 @@ namespace lopper {
   template<typename T> void VSTORE(float* addr, T op);
   template<typename T> void VSTORE(int32_t* addr, T op);
   template<typename T> void VSTORE(uint8_t* addr, T op);
+  template<typename T> void VSTORE3(float* addr, T op1, T op2, T op3);
   template<typename T> void VSTORE3(int32_t* addr, T op1, T op2, T op3);
   template<typename T> void VSTORE3(uint8_t* addr, T op1, T op2, T op3);
+  template<typename T> void VSTORE4(float* addr, T op1, T op2, T op3, T op4);
   template<typename T> void VSTORE4(int32_t* addr, T op1, T op2, T op3, T op4);
   template<typename T> void VSTORE4(uint8_t* addr, T op1, T op2, T op3, T op4);
   template<typename T> void VSTORE_ALIGNED(float* addr, T op) { VSTORE(addr, op); }
@@ -44,6 +46,8 @@ namespace lopper {
   template<InstructionSet S> SFLOAT VLOAD(const float* addr);
   template<InstructionSet S> SINT32 VLOAD(const int32_t* addr);
   template<InstructionSet S> SINT32 VLOAD(const uint8_t* addr);
+  template<InstructionSet S> SINT32 VLOAD4(const int32_t* addr);
+  template<InstructionSet S> SINT32 VLOAD4(const uint8_t* addr);
   // Set all lanes of the vector to the given value.
   template<InstructionSet S> SFLOAT VSET(float op);
   template<InstructionSet S> SINT32 VSET(int32_t op);
@@ -173,6 +177,14 @@ template<InstructionSet S> void _VSTORE4(int32_t* addr, SINT32 op1, SINT32 op2, 
   VSTORE(addr + (num_lanes << 1), VINTERLEAVE32_LO(op13_hi, op24_hi));
   VSTORE(addr + (num_lanes * 3), VINTERLEAVE32_HI(op13_hi, op24_hi));
 }
+template<InstructionSet S> void _VSTORE3(float* addr, SFLOAT op1, SFLOAT op2, SFLOAT op3) {
+  VSTORE3(reinterpret_cast<int32_t*>(addr),
+          VCAST_INT32<S>(op1), VCAST_INT32<S>(op2), VCAST_INT32<S>(op3));
+}
+template<InstructionSet S> void _VSTORE4(float* addr, SFLOAT op1, SFLOAT op2, SFLOAT op3, SFLOAT op4) {
+  VSTORE4(reinterpret_cast<int32_t*>(addr),
+          VCAST_INT32<S>(op1), VCAST_INT32<S>(op2), VCAST_INT32<S>(op3), VCAST_INT32<S>(op4));
+}
 
 }
 }
@@ -225,6 +237,11 @@ namespace lopper {
     addr[6] = (op1 >> 16) & 0xff; addr[7] = (op2 >> 16) & 0xff; addr[8] = (op3 >> 16) & 0xff;
     addr[9] = (op1 >> 24) & 0xff; addr[10] = (op2 >> 24) & 0xff; addr[11] = (op3 >> 24) & 0xff;
   }
+  template<> inline void VSTORE3(float* addr, float op1, float op2, float op3) {
+    addr[0] = op1;
+    addr[1] = op2;
+    addr[2] = op3;
+  }
   template<> inline void VSTORE4(int32_t* addr, int32_t op1, int32_t op2, int32_t op3, int32_t op4) {
     addr[0] = op1;
     addr[1] = op2;
@@ -236,6 +253,12 @@ namespace lopper {
     addr[4] = (op1 >> 8) & 0xff; addr[5] = (op2 >> 8) & 0xff; addr[6] = (op3 >> 8) & 0xff; addr[7] = (op4 >> 8) & 0xff;
     addr[8] = (op1 >> 16) & 0xff; addr[9] = (op2 >> 16) & 0xff; addr[10] = (op3 >> 16) & 0xff; addr[11] = (op4 >> 16) & 0xff;
     addr[12] = (op1 >> 24) & 0xff; addr[13] = (op2 >> 24) & 0xff; addr[14] = (op3 >> 24) & 0xff; addr[15] = (op4 >> 24) & 0xff;
+  }
+  template<> inline void VSTORE4(float* addr, float op1, float op2, float op3, float op4) {
+    addr[0] = op1;
+    addr[1] = op2;
+    addr[2] = op3;
+    addr[3] = op4;
   }
   template<> inline int32_t VLOAD<SCALAR>(const int32_t* addr) { return addr[0]; }
   template<> inline int32_t VLOAD<SCALAR>(const uint8_t* addr) {
@@ -434,10 +457,16 @@ namespace lopper {
   template<> inline void VSTORE3(int32_t* addr, __m128i op1, __m128i op2, __m128i op3) {
     _VSTORE3<SSE>(addr, op1, op2, op3);
   }
+  template<> inline void VSTORE3(float* addr, __m128 op1, __m128 op2, __m128 op3) {
+    _VSTORE3<SSE>(addr, op1, op2, op3);
+  }
   template<> inline void VSTORE3(uint8_t* addr, __m128i op1, __m128i op2, __m128i op3) {
     _VSTORE3<SSE>(addr, op1, op2, op3);
   }
   template<> inline void VSTORE4(int32_t* addr, __m128i op1, __m128i op2, __m128i op3, __m128i op4) {
+    _VSTORE4<SSE>(addr, op1, op2, op3, op4);
+  }
+  template<> inline void VSTORE4(float* addr, __m128 op1, __m128 op2, __m128 op3, __m128 op4) {
     _VSTORE4<SSE>(addr, op1, op2, op3, op4);
   }
   template<> inline void VSTORE4(uint8_t* addr, __m128i op1, __m128i op2, __m128i op3, __m128i op4) {
@@ -527,6 +556,9 @@ namespace lopper {
     VSTORE3(addr, _VLO(op1), _VLO(op2), _VLO(op3));
     VSTORE3(addr + 48, _VHI(op1), _VHI(op2), _VHI(op3));
   }
+  template<> inline void VSTORE3(float* addr, __m256 op1, __m256 op2, __m256 op3) {
+    _VSTORE3<AVX>(addr, op1, op2, op3);
+  }
   template<> inline void VSTORE4(int32_t* addr, __m256i op1, __m256i op2, __m256i op3, __m256i op4) {
     // This is faster than using the shared implementation.
     VSTORE4(addr, _VLO(op1), _VLO(op2), _VLO(op3), _VLO(op4));
@@ -536,6 +568,9 @@ namespace lopper {
     // This is faster than using the shared implementation.
     VSTORE4(addr, _VLO(op1), _VLO(op2), _VLO(op3), _VLO(op4));
     VSTORE4(addr + 64, _VHI(op1), _VHI(op2), _VHI(op3), _VHI(op4));
+  }
+  template<> inline void VSTORE4(float* addr, __m256 op1, __m256 op2, __m256 op3, __m256 op4) {
+    _VSTORE4<AVX>(addr, op1, op2, op3, op4);
   }
   template<> inline __m256i VLOAD<AVX>(const int32_t* addr) {
     return _VCONCAT(VLOAD<SSE>(addr), VLOAD<SSE>(addr + 4));
@@ -742,12 +777,18 @@ namespace lopper {
   template<> inline void VSTORE3(uint8_t* addr, int32x4_t op1, int32x4_t op2, int32x4_t op3) {
     vst3q_u8(addr, {vreinterpretq_u8_s32(op1), vreinterpretq_u8_s32(op2), vreinterpretq_u8_s32(op3)});
   }
+  template<> inline void VSTORE3(float* addr, float32x4_t op1, float32x4_t op2, float32x4_t op3) {
+    vst3q_f32(addr, {op1, op2, op3});
+  }
   template<> inline void VSTORE4(int32_t* addr, int32x4_t op1, int32x4_t op2, int32x4_t op3, int32x4_t op4) {
     vst4q_s32(addr, {op1, op2, op3, op4});
   }
   template<> inline void VSTORE4(uint8_t* addr, int32x4_t op1, int32x4_t op2, int32x4_t op3, int32x4_t op4) {
     vst4q_u8(addr, {vreinterpretq_u8_s32(op1), vreinterpretq_u8_s32(op2),
           vreinterpretq_u8_s32(op3), vreinterpretq_u8_s32(op4)});
+  }
+  template<> inline void VSTORE4(float* addr, float32x4_t op1, float32x4_t op2, float32x4_t op3, float32x4_t op4) {
+    vst4q_f32(addr, {op1, op2, op3, op4});
   }
   template<> inline int32x4_t VLOAD<NEON>(const int32_t* addr) { return vld1q_s32(addr); }
   template<> inline int32x4_t VLOAD<NEON>(const uint8_t* addr) { return vreinterpretq_s32_u8(vld1q_u8(addr)); }

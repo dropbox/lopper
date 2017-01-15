@@ -153,6 +153,8 @@ TYPED_TEST_P(LopperTypedPrimitiveTest, MultiStoreTest) {
   _MultiStoreTestHelper<uint8_t, 4, TypeParam>();
   _MultiStoreTestHelper<int32_t, 3, TypeParam>();
   _MultiStoreTestHelper<int32_t, 4, TypeParam>();
+  _MultiStoreTestHelper<float, 3, TypeParam>();
+  _MultiStoreTestHelper<float, 4, TypeParam>();
 }
 
 // A macro for checking SIMD and serial behaviors against each other

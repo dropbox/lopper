@@ -303,19 +303,19 @@ template<> struct _PixelStorer<SCALAR> {
   template<typename T> static void store(T* ptr, const MultipleIO<T, SCALAR>& val) {
     *ptr = (T)val;
   }
-  template<typename T> static void store3(T* ptr,
-                                          const MultipleIO<T, SCALAR>& val0,
-                                          const MultipleIO<T, SCALAR>& val1,
-                                          const MultipleIO<T, SCALAR>& val2) {
+  template<typename T> static void store(T* ptr,
+                                         const MultipleIO<T, SCALAR>& val0,
+                                         const MultipleIO<T, SCALAR>& val1,
+                                         const MultipleIO<T, SCALAR>& val2) {
     ptr[0] = (T)val0;
     ptr[1] = (T)val1;
     ptr[2] = (T)val2;
   }
-  template<typename T> static void store4(T* ptr,
-                                          const MultipleIO<T, SCALAR>& val0,
-                                          const MultipleIO<T, SCALAR>& val1,
-                                          const MultipleIO<T, SCALAR>& val2,
-                                          const MultipleIO<T, SCALAR>& val3) {
+  template<typename T> static void store(T* ptr,
+                                         const MultipleIO<T, SCALAR>& val0,
+                                         const MultipleIO<T, SCALAR>& val1,
+                                         const MultipleIO<T, SCALAR>& val2,
+                                         const MultipleIO<T, SCALAR>& val3) {
     ptr[0] = (T)val0;
     ptr[1] = (T)val1;
     ptr[2] = (T)val2;
@@ -324,115 +324,124 @@ template<> struct _PixelStorer<SCALAR> {
 };
 
 #ifndef LOPPER_NO_SIMD
-// XXX: Use vld3 for NEON.
+
+template<size_t D, size_t C> struct _DataStorer /* <LOPPER_TARGET> */ {
+  inline static constexpr size_t bytesPerOp();
+};
 template<> struct _PixelStorer<LOPPER_TARGET> {
-  template<typename T, size_t C> constexpr static size_t bytesPerOp() {
-    return LOPPER_BITWIDTH >> 3;
+  template<typename T, size_t C> static constexpr size_t bytesPerOp() {
+    return _DataStorer<sizeof(T), C>::bytesPerOp();
   }
   template<typename T> static void store(T* ptr, const MultipleIO<T, LOPPER_TARGET>& val) {
-    VSTORE(ptr, val);
+    _DataStorer<sizeof(T), 1>::store(ptr, val);
   }
-  template<typename T> static void store3(T* ptr,
-                                          const MultipleIO<T, LOPPER_TARGET>& val0,
-                                          const MultipleIO<T, LOPPER_TARGET>& val1,
-                                          const MultipleIO<T, LOPPER_TARGET>& val2);
-  template<typename T> static void store4(T* ptr,
-                                          const MultipleIO<T, LOPPER_TARGET>& val0,
-                                          const MultipleIO<T, LOPPER_TARGET>& val1,
-                                          const MultipleIO<T, LOPPER_TARGET>& val2,
-                                          const MultipleIO<T, LOPPER_TARGET>& val3);
+  template<typename T> static void store(T* ptr,
+                                         const MultipleIO<T, LOPPER_TARGET>& val0,
+                                         const MultipleIO<T, LOPPER_TARGET>& val1,
+                                         const MultipleIO<T, LOPPER_TARGET>& val2) {
+    _DataStorer<sizeof(T), 3>::store(ptr, val0, val1, val2);
+  }
+  template<typename T> static void store(T* ptr,
+                                         const MultipleIO<T, LOPPER_TARGET>& val0,
+                                         const MultipleIO<T, LOPPER_TARGET>& val1,
+                                         const MultipleIO<T, LOPPER_TARGET>& val2,
+                                         const MultipleIO<T, LOPPER_TARGET>& val3) {
+    _DataStorer<sizeof(T), 4>::store(ptr, val0, val1, val2, val3);
+  }
 };
 
-template<> inline void _PixelStorer<LOPPER_TARGET>::store<uint8_t>(uint8_t* ptr,
-                                                                   const Multiple<int32_t, LOPPER_TARGET>& val) {
-  if (InstructionSetTrait<LOPPER_TARGET>::num_lanes == 4u) {
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler0 =
-      VSET8x16<LOPPER_TARGET>(0, 4, 8, 12, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128);
-    VSTORE(ptr, VSHUFFLE8<LOPPER_TARGET>(val, _deshuffler0));
-  } else if (InstructionSetTrait<LOPPER_TARGET>::num_lanes == 8u) {
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler0 =
-      VSET8x16<LOPPER_TARGET>(0, 4, 8, 12, 16, 20, 24, 28, 128, 128, 128, 128, 128, 128, 128, 128);
-    VSTORE(ptr, VSHUFFLE8<LOPPER_TARGET>(val, _deshuffler0));
+template<> struct _DataStorer<1, 1> {
+  inline static constexpr size_t bytesPerOp() { return LOPPER_BITWIDTH >> 3; }
+  template<typename T> inline static void store(T* ptr, const MultipleIO<T, LOPPER_TARGET>& val) {
+    static_assert(std::is_same<T, uint8_t>::value, "Expect uint8_t");
+    constexpr size_t num_lanes = InstructionSetTrait<LOPPER_TARGET>::num_lanes;
+    static_assert(num_lanes == 4u || num_lanes == 8u, "Expect 4 or 8 lanes");
+    const auto deshuffler =
+      VSET8x16<LOPPER_TARGET>(0, 4, 8, 12,
+                              num_lanes == 8u ? 16 : 128,
+                              num_lanes == 8u ? 20 : 128,
+                              num_lanes == 8u ? 24 : 128,
+                              num_lanes == 8u ? 28 : 128,
+                              128, 128, 128, 128, 128, 128, 128, 128);
+    VSTORE(ptr, VSHUFFLE8<LOPPER_TARGET>(val, deshuffler));
   }
-}
+};
 
-template<> inline void _PixelStorer<LOPPER_TARGET>::store3<uint8_t>(uint8_t* ptr,
-                                                                    const Multiple<int32_t, LOPPER_TARGET>& val0,
-                                                                    const Multiple<int32_t, LOPPER_TARGET>& val1,
-                                                                    const Multiple<int32_t, LOPPER_TARGET>& val2) {
-  constexpr size_t num_lanes = InstructionSetTrait<LOPPER_TARGET>::num_lanes;
-  if (num_lanes == 4u) {
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler0 =
-      VSET8x16<LOPPER_TARGET>(0, 128, 128, 4, 128, 128, 8, 128, 128, 12, 128, 128, 128, 128, 128, 128);
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler1 =
-      VSET8x16<LOPPER_TARGET>(128, 0, 128, 128, 4, 128, 128, 8, 128, 128, 12, 128, 128, 128, 128, 128);
-    const typename InstructionSetTrait<LOPPER_TARGET>::INT32 _deshuffler2 =
-      VSET8x16<LOPPER_TARGET>(128, 128, 0, 128, 128, 4, 128, 128, 8, 128, 128, 12, 128, 128, 128, 128);
-    VSTORE(ptr, VBITWISE_OR(VBITWISE_OR(VSHUFFLE<LOPPER_TARGET>(val0, _deshuffler0),
-                                        VSHUFFLE<LOPPER_TARGET>(val1, _deshuffler1)),
-                            VSHUFFLE<LOPPER_TARGET>(val2, _deshuffler2)));
-  } else if (num_lanes == 8u) {
-    const auto _deshuffler0 = VSET4x8<LOPPER_TARGET>(0x04ffff00, 0xff08ffff, 0xffff0cff, 0x14ffff10,
-                                                     0xff18ffff, 0xffff1cff, -1, -1);
-    const auto _deshuffler1 = VSET4x8<LOPPER_TARGET>(0xffff00ff, 0x08ffff04, 0xff0cffff, 0xffff10ff,
-                                                     0x18ffff14, 0xff1cffff, -1, -1);
-    const auto _deshuffler2 = VSET4x8<LOPPER_TARGET>(0xff00ffff, 0xffff04ff, 0x0cffff08, 0xff10ffff,
-                                                     0xffff14ff, 0x1cffff18, -1, -1);
-    VSTORE(ptr, VBITWISE_OR(VBITWISE_OR(VSHUFFLE8<LOPPER_TARGET>(val0, _deshuffler0),
-                                        VSHUFFLE8<LOPPER_TARGET>(val1, _deshuffler1)),
-                            VSHUFFLE8<LOPPER_TARGET>(val2, _deshuffler2)));
+template<> struct _DataStorer<1, 3> {
+  inline static constexpr size_t bytesPerOp() { return LOPPER_BITWIDTH >> 3; }
+  template<typename T> inline static void store(T* ptr,
+                                                const MultipleIO<T, LOPPER_TARGET>& val0,
+                                                const MultipleIO<T, LOPPER_TARGET>& val1,
+                                                const MultipleIO<T, LOPPER_TARGET>& val2) {
+    static_assert(std::is_same<T, uint8_t>::value, "Expect uint8_t");
+    constexpr size_t num_lanes = InstructionSetTrait<LOPPER_TARGET>::num_lanes;
+    static_assert(num_lanes == 4u || num_lanes == 8u, "Expect 4 or 8 lanes");
+    if (num_lanes == 4u) {
+      const auto deshuffler0 = VSET4x4<LOPPER_TARGET>(0x04ffff00, 0xff08ffff, 0xffff0cff, 0xffffffff);
+      const auto deshuffler1 = VSET4x4<LOPPER_TARGET>(0xffff00ff, 0x08ffff04, 0xff0cffff, 0xffffffff);
+      const auto deshuffler2 = VSET4x4<LOPPER_TARGET>(0xff00ffff, 0xffff04ff, 0x0cffff08, 0xffffffff);
+      VSTORE(ptr, VBITWISE_OR(VBITWISE_OR(VSHUFFLE<LOPPER_TARGET>(val0, deshuffler0),
+                                          VSHUFFLE<LOPPER_TARGET>(val1, deshuffler1)),
+                              VSHUFFLE<LOPPER_TARGET>(val2, deshuffler2)));
+    } else if (num_lanes == 8u) {
+      const auto deshuffler0 = VSET4x8<LOPPER_TARGET>(0x04ffff00, 0xff08ffff, 0xffff0cff, 0x14ffff10,
+                                                      0xff18ffff, 0xffff1cff, -1, -1);
+      const auto deshuffler1 = VSET4x8<LOPPER_TARGET>(0xffff00ff, 0x08ffff04, 0xff0cffff, 0xffff10ff,
+                                                      0x18ffff14, 0xff1cffff, -1, -1);
+      const auto deshuffler2 = VSET4x8<LOPPER_TARGET>(0xff00ffff, 0xffff04ff, 0x0cffff08, 0xff10ffff,
+                                                      0xffff14ff, 0x1cffff18, -1, -1);
+      VSTORE(ptr, VBITWISE_OR(VBITWISE_OR(VSHUFFLE8<LOPPER_TARGET>(val0, deshuffler0),
+                                          VSHUFFLE8<LOPPER_TARGET>(val1, deshuffler1)),
+                              VSHUFFLE8<LOPPER_TARGET>(val2, deshuffler2)));
+    }
   }
-}
+};
 
-template<> inline void _PixelStorer<LOPPER_TARGET>::store4<uint8_t>(uint8_t* ptr,
-                                                                    const Multiple<int32_t, LOPPER_TARGET>& val0,
-                                                                    const Multiple<int32_t, LOPPER_TARGET>& val1,
-                                                                    const Multiple<int32_t, LOPPER_TARGET>& val2,
-                                                                    const Multiple<int32_t, LOPPER_TARGET>& val3) {
-  const auto mask = VSET<LOPPER_TARGET>(255);
-  const auto val0_masked = VBITWISE_AND(val0, mask);
-  const auto val1_masked = VSHIFTL<8>(VBITWISE_AND(val1, mask));
-  const auto val2_masked = VSHIFTL<16>(VBITWISE_AND(val2, mask));
-  const auto val3_masked = VSHIFTL<24>(VBITWISE_AND(val3, mask));
-  VSTORE(ptr, VBITWISE_OR(VBITWISE_OR(val0_masked, val1_masked), VBITWISE_OR(val2_masked, val3_masked)));
-}
+template<> struct _DataStorer<1, 4> {
+  inline static constexpr size_t bytesPerOp() { return LOPPER_BITWIDTH >> 3; }
+  template<typename T> inline static void store(T* ptr,
+                                                const MultipleIO<T, LOPPER_TARGET>& val0,
+                                                const MultipleIO<T, LOPPER_TARGET>& val1,
+                                                const MultipleIO<T, LOPPER_TARGET>& val2,
+                                                const MultipleIO<T, LOPPER_TARGET>& val3) {
+    static_assert(std::is_same<T, uint8_t>::value, "Expect uint8_t");
+    const auto mask = VSET<LOPPER_TARGET>(255);
+    const auto val0_masked = VBITWISE_AND(val0, mask);
+    const auto val1_masked = VSHIFTL<8>(VBITWISE_AND(val1, mask));
+    const auto val2_masked = VSHIFTL<16>(VBITWISE_AND(val2, mask));
+    const auto val3_masked = VSHIFTL<24>(VBITWISE_AND(val3, mask));
+    VSTORE(ptr, VBITWISE_OR(VBITWISE_OR(val0_masked, val1_masked), VBITWISE_OR(val2_masked, val3_masked)));
+  }
+};
 
-template<> inline void _PixelStorer<LOPPER_TARGET>::store3<int32_t>(int32_t* ptr,
-                                                                    const Multiple<int32_t, LOPPER_TARGET>& val0,
-                                                                    const Multiple<int32_t, LOPPER_TARGET>& val1,
-                                                                    const Multiple<int32_t, LOPPER_TARGET>& val2) {
-  VSTORE3(ptr, val0, val1, val2);
-}
+template<> struct _DataStorer<4, 1> {
+  inline static constexpr size_t bytesPerOp() { return LOPPER_BITWIDTH >> 3; }
+  template<typename T> inline static void store(T* ptr, const MultipleIO<T, LOPPER_TARGET>& val) {
+    VSTORE(ptr, val);
+  }
+};
 
-template<> inline void _PixelStorer<LOPPER_TARGET>::store4<int32_t>(int32_t* ptr,
-                                                                    const Multiple<int32_t, LOPPER_TARGET>& val0,
-                                                                    const Multiple<int32_t, LOPPER_TARGET>& val1,
-                                                                    const Multiple<int32_t, LOPPER_TARGET>& val2,
-                                                                    const Multiple<int32_t, LOPPER_TARGET>& val3) {
-  VSTORE4(ptr, val0, val1, val2, val3);
-}
+template<> struct _DataStorer<4, 3> {
+  inline static constexpr size_t bytesPerOp() { return (LOPPER_BITWIDTH >> 3) * 3; }
+  template<typename T> inline static void store(T* ptr,
+                                                const MultipleIO<T, LOPPER_TARGET>& val0,
+                                                const MultipleIO<T, LOPPER_TARGET>& val1,
+                                                const MultipleIO<T, LOPPER_TARGET>& val2) {
+    VSTORE3(ptr, val0, val1, val2);
+  }
+};
 
-template<> inline void _PixelStorer<LOPPER_TARGET>::store3<float>(float* ptr,
-                                                                  const Multiple<float, LOPPER_TARGET>& val0,
-                                                                  const Multiple<float, LOPPER_TARGET>& val1,
-                                                                  const Multiple<float, LOPPER_TARGET>& val2) {
-  _PixelStorer<LOPPER_TARGET>::store3<int32_t>(reinterpret_cast<int32_t*>(ptr),
-                                               VCAST_INT32<LOPPER_TARGET>(val0),
-                                               VCAST_INT32<LOPPER_TARGET>(val1),
-                                               VCAST_INT32<LOPPER_TARGET>(val2));
-}
 
-template<> inline void _PixelStorer<LOPPER_TARGET>::store4<float>(float* ptr,
-                                                                  const Multiple<float, LOPPER_TARGET>& val0,
-                                                                  const Multiple<float, LOPPER_TARGET>& val1,
-                                                                  const Multiple<float, LOPPER_TARGET>& val2,
-                                                                  const Multiple<float, LOPPER_TARGET>& val3) {
-  _PixelStorer<LOPPER_TARGET>::store4<int32_t>(reinterpret_cast<int32_t*>(ptr),
-                                               VCAST_INT32<LOPPER_TARGET>(val0),
-                                               VCAST_INT32<LOPPER_TARGET>(val1),
-                                               VCAST_INT32<LOPPER_TARGET>(val2),
-                                               VCAST_INT32<LOPPER_TARGET>(val3));
-}
+template<> struct _DataStorer<4, 4> {
+  inline static constexpr size_t bytesPerOp() { return (LOPPER_BITWIDTH >> 3) * 4; }
+  template<typename T> inline static void store(T* ptr,
+                                                const MultipleIO<T, LOPPER_TARGET>& val0,
+                                                const MultipleIO<T, LOPPER_TARGET>& val1,
+                                                const MultipleIO<T, LOPPER_TARGET>& val2,
+                                                const MultipleIO<T, LOPPER_TARGET>& val3) {
+    VSTORE4(ptr, val0, val1, val2, val3);
+  }
+};
 
 #endif
 
@@ -495,7 +504,7 @@ template<typename T, typename E, typename ... Es> struct _ExprSaveN : public _Ex
     const auto v0 = this->_e0.template eval<S, U>(x, args...);
     const auto v1 = this->_e1.template eval<S, U>(x, args...);
     const auto v2 = this->_e2.template eval<S, U>(x, args...);
-    _PixelStorer<S>::template store3<T>(_ptr + x * 3, v0, v1, v2);
+    _PixelStorer<S>::template store<T>(_ptr + x * 3, v0, v1, v2);
     return v0;
   }
 
@@ -505,7 +514,7 @@ template<typename T, typename E, typename ... Es> struct _ExprSaveN : public _Ex
     const auto v1 = this->_e1.template eval<S, U>(x, args...);
     const auto v2 = this->_e2.template eval<S, U>(x, args...);
     const auto v3 = this->_e3.template eval<S, U>(x, args...);
-    _PixelStorer<S>::template store4<T>(_ptr + x * 4, v0, v1, v2, v3);
+    _PixelStorer<S>::template store<T>(_ptr + x * 4, v0, v1, v2, v3);
     return v0;
   }
 private:
