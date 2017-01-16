@@ -116,6 +116,51 @@ TYPED_TEST_P(LopperTypedPrimitiveTest, LoadUInt8IntoInt32Test) {
   }
 }
 
+template<typename T, size_t C, typename TypeParam> void _MultiLoadTestHelper() {
+  T buffer_in[(TypeParam::bitwidth / 8 / sizeof(T)) * C];
+  for (size_t i = 0; i < TypeParam::bitwidth / 8 / sizeof(T); i++) {
+    for (size_t c = 0; c < C; c++) {
+      buffer_in[i*C+c] = ((i+0+10*c) | ((i+1+10*c) << 8) | ((i+2+10*c) << 16) | ((i+3+10*c) << 24));
+    }
+  }
+  T buffer_out[C][(TypeParam::bitwidth / 8 / sizeof(T))];
+  switch (C) {
+  case 3:
+    {
+      auto tmp = VLOAD3<TypeParam::value>(buffer_in);
+      VSTORE(buffer_out[0], std::get<0>(tmp));
+      VSTORE(buffer_out[1], std::get<1>(tmp));
+      VSTORE(buffer_out[2], std::get<2>(tmp));
+      break;
+    }
+  case 4:
+    {
+      auto tmp = VLOAD4<TypeParam::value>(buffer_in);
+      VSTORE(buffer_out[0], std::get<0>(tmp));
+      VSTORE(buffer_out[1], std::get<1>(tmp));
+      VSTORE(buffer_out[2], std::get<2>(tmp));
+      VSTORE(buffer_out[3], std::get<3>(tmp));
+      break;
+    }
+  default:
+    ASSERT_FALSE(true);
+  }
+  for (size_t i = 0; i < TypeParam::bitwidth / 8 / sizeof(T); i++) {
+    for (size_t c = 0; c < C; c++) {
+      ASSERT_EQ(buffer_in[i*C+c], buffer_out[c][i]);
+    }
+  }
+}
+
+TYPED_TEST_P(LopperTypedPrimitiveTest, MultiLoadTest) {
+  _MultiLoadTestHelper<uint8_t, 3, TypeParam>();
+  _MultiLoadTestHelper<uint8_t, 4, TypeParam>();
+  _MultiLoadTestHelper<int32_t, 3, TypeParam>();
+  _MultiLoadTestHelper<int32_t, 4, TypeParam>();
+  _MultiLoadTestHelper<float, 3, TypeParam>();
+  _MultiLoadTestHelper<float, 4, TypeParam>();
+}
+
 template<typename T, size_t C, typename TypeParam> void _MultiStoreTestHelper() {
   T buffer_in[C][(TypeParam::bitwidth / 8 / sizeof(T))];
   for (size_t i = 0; i < TypeParam::bitwidth / 8 / sizeof(T); i++) {
@@ -476,6 +521,7 @@ REGISTER_TYPED_TEST_CASE_P(LopperTypedPrimitiveTest,
                            ExponentiationTest,
                            LoadTest,
                            LoadUInt8IntoInt32Test,
+                           MultiLoadTest,
                            MultiStoreTest,
                            FloatingPointMath,
                            IntegerMath,

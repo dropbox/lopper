@@ -1,6 +1,7 @@
 #pragma once
 
 #include <math.h>
+#include <tuple>
 
 #include "multiple.hpp"
 #include "platform.hpp"
@@ -66,6 +67,18 @@ namespace lopper {
   template<InstructionSet S> SFLOAT VLOAD(const float* addr);
   template<InstructionSet S> SINT32 VLOAD(const int32_t* addr);
   template<InstructionSet S> SINT32 VLOAD(const uint8_t* addr);
+  // Load three vectors from the given address, interleaving at 32-bit granularity.
+  template<InstructionSet S> std::tuple<SFLOAT, SFLOAT, SFLOAT> VLOAD3(const float* addr);
+  // Load three vectors from the given address, interleaving at 32-bit granularity.
+  template<InstructionSet S> std::tuple<SINT32, SINT32, SINT32> VLOAD3(const int32_t* addr);
+  // Load three vectors from the given address, interleaving at 8-bit granularity.
+  template<InstructionSet S> std::tuple<SINT32, SINT32, SINT32> VLOAD3(const uint8_t* addr);
+  // Load four vectors from the given address, interleaving at 32-bit granularity.
+  template<InstructionSet S> std::tuple<SFLOAT, SFLOAT, SFLOAT, SFLOAT> VLOAD4(const float* addr);
+  // Load four vectors from the given address, interleaving at 32-bit granularity.
+  template<InstructionSet S> std::tuple<SINT32, SINT32, SINT32, SINT32> VLOAD4(const int32_t* addr);
+  // Load four vectors from the given address, interleaving at 8-bit granularity.
+  template<InstructionSet S> std::tuple<SINT32, SINT32, SINT32, SINT32> VLOAD4(const uint8_t* addr);
   // Set all 32-bit lanes of the vector to the given 32-bit value.
   template<InstructionSet S> SFLOAT VSET(float op);
   // Set all 32-bit lanes of the vector to the given 32-bit value.
@@ -140,6 +153,20 @@ namespace lopper {
 /*======================================================*/
 namespace lopper {
 namespace {
+
+// On ARM Neon, there's no native cast between int and float vectors, so we provide one.
+template<typename T> struct VCASTHelper {};
+template<> struct VCASTHelper<int32_t> {
+  template<InstructionSet S, typename T> inline static typename InstructionSetTrait<S>::INT32 cast(T op1) {
+    return VCAST_INT32<S>(op1);
+  }
+};
+template<> struct VCASTHelper<float> {
+  template<InstructionSet S, typename T> inline static typename InstructionSetTrait<S>::FLOAT cast(T op1) {
+    return VCAST_FLOAT<S>(op1);
+  }
+};
+
 template<InstructionSet S> typename std::enable_if<InstructionSetTrait<S>::num_lanes == 4u>::type
 _VSTORE3(uint8_t* addr, SINT32 op1, SINT32 op2, SINT32 op3) {
   const auto deshuffler1 =
@@ -219,6 +246,118 @@ template<InstructionSet S> void _VSTORE4(float* addr, SFLOAT op1, SFLOAT op2, SF
   VSTORE4(reinterpret_cast<int32_t*>(addr),
           VCAST_INT32<S>(op1), VCAST_INT32<S>(op2), VCAST_INT32<S>(op3), VCAST_INT32<S>(op4));
 }
+template<InstructionSet S, typename T>
+typename std::enable_if<InstructionSetTrait<S>::num_lanes == 4u && sizeof(T) == 4u,
+                        std::tuple<typename MultipleTrait<T, S>::vtype,
+                                   typename MultipleTrait<T, S>::vtype,
+                                   typename MultipleTrait<T, S>::vtype>>::type _VLOAD3(const T* addr) {
+  const auto in0 = VCAST_INT32<S>(VLOAD<S>(addr));
+  const auto in1 = VCAST_INT32<S>(VLOAD<S>(addr + 4));
+  const auto in2 = VCAST_INT32<S>(VLOAD<S>(addr + 8));
+
+  // We want to go from [R0 G0 B0 R1] [G1 B1 R2 G2] [B2 R3 G3 B3] to [R0..R3] [G0..G3] [B0..B3]
+  const auto deshuffler00
+  = VSET8x16<S>(0, 1, 2, 3, 12, 13, 14, 15, 128, 128, 128, 128, 128, 128, 128, 128);
+  const auto deshuffler01
+  = VSET8x16<S>(128, 128, 128, 128, 128, 128, 128, 128, 8, 9, 10, 11, 128, 128, 128, 128);
+  const auto deshuffler02
+  = VSET8x16<S>(128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 4, 5, 6, 7);
+  const auto deshuffler10
+  = VSET8x16<S>(4, 5, 6, 7, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128);
+  const auto deshuffler11
+  = VSET8x16<S>(128, 128, 128, 128, 0, 1, 2, 3, 12, 13, 14, 15, 128, 128, 128, 128);
+  const auto deshuffler12
+  = VSET8x16<S>(128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 8, 9, 10, 11);
+  const auto deshuffler20
+  = VSET8x16<S>(8, 9, 10, 11, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128);
+  const auto deshuffler21
+  = VSET8x16<S>(128, 128, 128, 128, 4, 5, 6, 7, 128, 128, 128, 128, 128, 128, 128, 128);
+  const auto deshuffler22
+  = VSET8x16<S>(128, 128, 128, 128, 128, 128, 128, 128, 0, 1, 2, 3, 12, 13, 14, 15);
+
+  const auto out0 = VBITWISE_OR(VBITWISE_OR(VSHUFFLE8<S>(in0, deshuffler00),
+                                            VSHUFFLE8<S>(in1, deshuffler01)),
+                                VSHUFFLE8<S>(in2, deshuffler02));
+  const auto out1 = VBITWISE_OR(VBITWISE_OR(VSHUFFLE8<S>(in0, deshuffler10),
+                                            VSHUFFLE8<S>(in1, deshuffler11)),
+                                VSHUFFLE8<S>(in2, deshuffler12));
+  const auto out2 = VBITWISE_OR(VBITWISE_OR(VSHUFFLE8<S>(in0, deshuffler20),
+                                            VSHUFFLE8<S>(in1, deshuffler21)),
+                                VSHUFFLE8<S>(in2, deshuffler22));
+  return std::make_tuple(VCASTHelper<T>::template cast<S>(out0),
+                         VCASTHelper<T>::template cast<S>(out1),
+                         VCASTHelper<T>::template cast<S>(out2));
+}
+template<InstructionSet S, typename T>
+typename std::enable_if<InstructionSetTrait<S>::num_lanes == 8u && sizeof(T) == 4u,
+                        std::tuple<typename MultipleTrait<T, S>::vtype,
+                                   typename MultipleTrait<T, S>::vtype,
+                                   typename MultipleTrait<T, S>::vtype>>::type _VLOAD3(const T* addr) {
+  const auto in0 = VCAST_INT32<S>(VLOAD<S>(addr));
+  const auto in1 = VCAST_INT32<S>(VLOAD<S>(addr + 8));
+  const auto in2 = VCAST_INT32<S>(VLOAD<S>(addr + 16));
+
+  // Go from [R0 G0 B0 R1 G1 B1 R2 G2] [B2 R3 G3 B3 R4 G4 B4 R5] [G5 B5 R6 G6 B6 R7 G7 B7]
+  // to [R0..R7] [G0..G7] [B0..B7]
+  // Extract the appropriate channels from input vectors, using bitwise masks.
+  const auto mask0 = VSET4x8<S>(-1, 0, 0, -1, 0, 0, -1, 0);
+  const auto mask1 = VSET4x8<S>(0, -1, 0, 0, -1, 0, 0, -1);
+  const auto mask2 = VSET4x8<S>(0, 0, -1, 0, 0, -1, 0, 0);
+  const auto tmp0 = VBITWISE_OR(VBITWISE_OR(VBITWISE_AND(mask0, in0), VBITWISE_AND(mask1, in1)), VBITWISE_AND(mask2, in2));
+  const auto tmp1 = VBITWISE_OR(VBITWISE_OR(VBITWISE_AND(mask0, in2), VBITWISE_AND(mask1, in0)), VBITWISE_AND(mask2, in1));
+  const auto tmp2 = VBITWISE_OR(VBITWISE_OR(VBITWISE_AND(mask0, in1), VBITWISE_AND(mask1, in2)), VBITWISE_AND(mask2, in0));
+  // At this point, we should have:
+  //  tmp0 = R0 R3 R6 R1 R4 R7 R2 R5
+  //  tmp1 = G5 G0 G3 G6 G1 G4 G7 G2
+  //  tmp2 = B2 B5 B0 B3 B6 B1 B4 B7
+  const auto out0 = VSHUFFLE32<S>(tmp0, VSET4x8<S>(0, 3, 6, 1, 4, 7, 2, 5));
+  const auto out1 = VSHUFFLE32<S>(tmp1, VSET4x8<S>(1, 4, 7, 2, 5, 0, 3, 6));
+  const auto out2 = VSHUFFLE32<S>(tmp2, VSET4x8<S>(2, 5, 0, 3, 6, 1, 4, 7));
+  return std::make_tuple(VCASTHelper<T>::template cast<S>(out0),
+                         VCASTHelper<T>::template cast<S>(out1),
+                         VCASTHelper<T>::template cast<S>(out2));
+}
+template<InstructionSet S, typename T>
+typename std::enable_if<InstructionSetTrait<S>::num_lanes % 4 == 0 && sizeof(T) == 4u,
+                        std::tuple<typename MultipleTrait<T, S>::vtype,
+                                   typename MultipleTrait<T, S>::vtype,
+                                   typename MultipleTrait<T, S>::vtype,
+                                   typename MultipleTrait<T, S>::vtype>>::type _VLOAD4(const T* addr) {
+  constexpr size_t num_lanes = InstructionSetTrait<S>::num_lanes;
+  const auto in0 = VCAST_INT32<S>(VLOAD<S>(addr));
+  const auto in1 = VCAST_INT32<S>(VLOAD<S>(addr + num_lanes));
+  const auto in2 = VCAST_INT32<S>(VLOAD<S>(addr + (num_lanes << 1)));
+  const auto in3 = VCAST_INT32<S>(VLOAD<S>(addr + (num_lanes * 3)));
+  const auto val02_lo = VINTERLEAVE32_LO(in0, in2);
+  const auto val02_hi = VINTERLEAVE32_HI(in0, in2);
+  const auto val13_lo = VINTERLEAVE32_LO(in1, in3);
+  const auto val13_hi = VINTERLEAVE32_HI(in1, in3);
+  if (num_lanes == 4u) {
+    // R0 R2 G0 G2 | B0 B2 A0 A2 | R1 R3 G1 G3 | B1 B3 A1 A3
+    const auto out0 = VINTERLEAVE32_LO(val02_lo, val13_lo);
+    const auto out1 = VINTERLEAVE32_HI(val02_lo, val13_lo);
+    const auto out2 = VINTERLEAVE32_LO(val02_hi, val13_hi);
+    const auto out3 = VINTERLEAVE32_HI(val02_hi, val13_hi);
+    return std::make_tuple(VCASTHelper<T>::template cast<S>(out0),
+                           VCASTHelper<T>::template cast<S>(out1),
+                           VCASTHelper<T>::template cast<S>(out2),
+                           VCASTHelper<T>::template cast<S>(out3));
+  } else if (num_lanes == 8u) {
+    // R0 R4 G0 G4 B0 B4 A0 A4 | R1 R5 G1 G5 B1 B5 A1 A5 | R2 R6 G2 G6 ...
+    const auto tmp0 = VINTERLEAVE32_LO(val02_lo, val13_lo); // R0 R2 R4 R6 G0 G2 G4 G6
+    const auto tmp1 = VINTERLEAVE32_HI(val02_lo, val13_lo); // B0 B2 B4 B6 A0 A2 A4 A6
+    const auto tmp2 = VINTERLEAVE32_LO(val02_hi, val13_hi); // R1 R3 R5 R7 ...
+    const auto tmp3 = VINTERLEAVE32_HI(val02_hi, val13_hi); // ...
+    const auto out0 = VINTERLEAVE32_LO(tmp0, tmp2);
+    const auto out1 = VINTERLEAVE32_HI(tmp0, tmp2);
+    const auto out2 = VINTERLEAVE32_LO(tmp1, tmp3);
+    const auto out3 = VINTERLEAVE32_HI(tmp1, tmp3);
+    return std::make_tuple(VCASTHelper<T>::template cast<S>(out0),
+                           VCASTHelper<T>::template cast<S>(out1),
+                           VCASTHelper<T>::template cast<S>(out2),
+                           VCASTHelper<T>::template cast<S>(out3));
+  }
+}
 
 }
 }
@@ -239,6 +378,12 @@ namespace lopper {
   template<> inline float VINTERLEAVE32_HI(float, float op2) { return op2; }
   template<> inline void VSTORE(float* addr, float op) { addr[0] = op; }
   template<> inline float VLOAD<SCALAR>(const float* addr) { return addr[0]; }
+  template<> inline std::tuple<float, float, float> VLOAD3<SCALAR>(const float* addr) {
+    return std::make_tuple(addr[0], addr[1], addr[2]);
+  }
+  template<> inline std::tuple<float, float, float, float> VLOAD4<SCALAR>(const float* addr) {
+    return std::make_tuple(addr[0], addr[1], addr[2], addr[3]);
+  }
   template<> inline float VSET<SCALAR>(float op) { return op; }
   template<> inline int32_t VSET8x16<SCALAR>(uint8_t op_a, uint8_t op_b, uint8_t op_c, uint8_t op_d,
                                              uint8_t, uint8_t, uint8_t, uint8_t,
@@ -295,9 +440,28 @@ namespace lopper {
     addr[3] = op4;
   }
   template<> inline int32_t VLOAD<SCALAR>(const int32_t* addr) { return addr[0]; }
+  template<> inline std::tuple<int32_t, int32_t, int32_t> VLOAD3<SCALAR>(const int32_t* addr) {
+    return std::make_tuple(addr[0], addr[1], addr[2]);
+  }
+  template<> inline std::tuple<int32_t, int32_t, int32_t, int32_t> VLOAD4<SCALAR>(const int32_t* addr) {
+    return std::make_tuple(addr[0], addr[1], addr[2], addr[3]);
+  }
   template<> inline int32_t VLOAD<SCALAR>(const uint8_t* addr) {
     // NOTE(jongmin): One may be tempted to dereference the pointer as int32_t*, but this is actually illegal.
     int32_t tmp = 0; memcpy((char*)&tmp, addr, sizeof(int32_t)); return tmp;
+  }
+  template<> inline std::tuple<int32_t, int32_t, int32_t> VLOAD3<SCALAR>(const uint8_t* addr) {
+    const int32_t val0 = addr[0] | (addr[3] << 8) | (addr[6] << 16) | (addr[9] << 24);
+    const int32_t val1 = addr[1] | (addr[4] << 8) | (addr[7] << 16) | (addr[10] << 24);
+    const int32_t val2 = addr[2] | (addr[5] << 8) | (addr[8] << 16) | (addr[11] << 24);
+    return std::make_tuple(val0, val1, val2);
+  }
+  template<> inline std::tuple<int32_t, int32_t, int32_t, int32_t> VLOAD4<SCALAR>(const uint8_t* addr) {
+    const int32_t val0 = addr[0] | (addr[4] << 8) | (addr[8] << 16) | (addr[12] << 24);
+    const int32_t val1 = addr[1] | (addr[5] << 8) | (addr[9] << 16) | (addr[13] << 24);
+    const int32_t val2 = addr[2] | (addr[6] << 8) | (addr[10] << 16) | (addr[14] << 24);
+    const int32_t val3 = addr[3] | (addr[7] << 8) | (addr[11] << 16) | (addr[15] << 24);
+    return std::make_tuple(val0, val1, val2, val3);
   }
   template<> inline int32_t VSET<SCALAR>(int32_t op) { return op; }
 
@@ -378,6 +542,12 @@ namespace lopper {
   template<> inline void VSTORE(float* addr, __m128 op) { _mm_storeu_ps(addr, op); }
   template<> inline void VSTORE_ALIGNED(float* addr, __m128 op) { _mm_store_ps(addr, op); }
   template<> inline __m128 VLOAD<SSE>(const float* addr) { return _mm_loadu_ps(addr); }
+  template<> inline std::tuple<__m128, __m128, __m128> VLOAD3<SSE>(const float* addr) {
+    return _VLOAD3<SSE>(addr);
+  }
+  template<> inline std::tuple<__m128, __m128, __m128, __m128> VLOAD4<SSE>(const float* addr) {
+    return _VLOAD4<SSE>(addr);
+  }
   template<> inline __m128 VSET<SSE>(float op) { return _mm_set1_ps(op); }
 
   template<> inline __m128i VADD(__m128i op1, __m128i op2) { return _mm_add_epi32(op1, op2); }
@@ -400,6 +570,12 @@ namespace lopper {
   template<> inline void VSTORE(uint8_t* addr, __m128i op) { _mm_storeu_si128((__m128i*)(void*)addr, op); }
   template<> inline void VSTORE_ALIGNED(uint8_t* addr, __m128i op) { _mm_store_si128((__m128i*)(void*)addr, op); }
   template<> inline __m128i VLOAD<SSE>(const int32_t* addr) { return _mm_loadu_si128((__m128i*)(void*)addr); }
+  template<> inline std::tuple<__m128i, __m128i, __m128i> VLOAD3<SSE>(const int32_t* addr) {
+    return _VLOAD3<SSE>(addr);
+  }
+  template<> inline std::tuple<__m128i, __m128i, __m128i, __m128i> VLOAD4<SSE>(const int32_t* addr) {
+    return _VLOAD4<SSE>(addr);
+  }
   template<> inline __m128i VLOAD<SSE>(const uint8_t* addr) { return _mm_loadu_si128((__m128i*)(void*)addr); }
   template<> inline __m128i VSET<SSE>(int32_t op) { return _mm_set1_epi32(op); }
   template<> inline __m128i VSET8x16<SSE>(uint8_t op_a, uint8_t op_b, uint8_t op_c, uint8_t op_d,
@@ -513,6 +689,44 @@ namespace lopper {
     VSTORE(addr + 32, _mm_unpacklo_epi8(op13_hi, op24_hi));
     VSTORE(addr + 48, _mm_unpackhi_epi8(op13_hi, op24_hi));
   }
+  template<> inline std::tuple<__m128i, __m128i, __m128i> VLOAD3<SSE>(const uint8_t* addr) {
+    const auto val0 = VLOAD<SSE>(addr);
+    const auto val1 = VLOAD<SSE>(addr + 16);
+    const auto val2 = VLOAD<SSE>(addr + 32);
+    const auto deshuffler0 = VSET8x16<SSE>(0, 3, 6, 9, 12, 15, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128);
+    const auto deshuffler1 = VSET8x16<SSE>(128, 128, 128, 128, 128, 0, 3, 6, 9, 12, 15, 128, 128, 128, 128, 128);
+    const auto deshuffler2 = VSET8x16<SSE>(128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 0, 3, 6, 9, 12, 15);
+    const auto out0 = VBITWISE_OR(VBITWISE_OR(VSHUFFLE8<SSE>(val0, deshuffler0),
+                                              VSHUFFLE8<SSE>(_mm_slli_si128(val1, 1), deshuffler1)),
+                                  VSHUFFLE8<SSE>(_mm_slli_si128(val2, 2), deshuffler2));
+    const auto out1 = VBITWISE_OR(VBITWISE_OR(VSHUFFLE8<SSE>(_mm_srli_si128(val0, 1), deshuffler0),
+                                              VSHUFFLE8<SSE>(val1, deshuffler1)),
+                                  VSHUFFLE8<SSE>(_mm_slli_si128(val2, 1), deshuffler2));
+    const auto out2 = VBITWISE_OR(VBITWISE_OR(VSHUFFLE8<SSE>(_mm_srli_si128(val0, 2), deshuffler0),
+                                              VSHUFFLE8<SSE>(_mm_srli_si128(val1, 1), deshuffler1)),
+                                  VSHUFFLE8<SSE>(val2, deshuffler2));
+    return std::make_tuple(out0, out1, out2);
+  }
+  template<> inline std::tuple<__m128i, __m128i, __m128i, __m128i> VLOAD4<SSE>(const uint8_t* addr) {
+    const auto val0 = VLOAD<SSE>(addr);       // a0 b0 c0 d0 a1 b1 c1 d1 ...
+    const auto val1 = VLOAD<SSE>(addr + 16);  // ...
+    const auto val2 = VLOAD<SSE>(addr + 32);  // ...
+    const auto val3 = VLOAD<SSE>(addr + 48);  // ...
+    const auto deshuffler = VSET8x16<SSE>(0, 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15);
+    const auto tmp0 = VSHUFFLE8<SSE>(val0, deshuffler);  // a0 a1 a2 a3 b0 b1 b2 b3 c0 c1 c2 c3 d0 d1 d2 d3
+    const auto tmp1 = VSHUFFLE8<SSE>(val1, deshuffler);  // a4 a5 a6 a7 b4 b5 b6 b7 ...
+    const auto tmp2 = VSHUFFLE8<SSE>(val2, deshuffler);  // ...
+    const auto tmp3 = VSHUFFLE8<SSE>(val3, deshuffler);  // ...
+
+    const auto tmp02_lo = VINTERLEAVE32_LO(tmp0, tmp2);  // a0 a1 a2 a3 a8 a9 a? a? b0 b1 b2 b3 ...
+    const auto tmp13_lo = VINTERLEAVE32_LO(tmp1, tmp3);  // a4 a5 a6 a7 a? a? a? a? ...
+    const auto tmp02_hi = VINTERLEAVE32_HI(tmp0, tmp2);
+    const auto tmp13_hi = VINTERLEAVE32_HI(tmp1, tmp3);
+    return std::make_tuple(VINTERLEAVE32_LO(tmp02_lo, tmp13_lo),
+                           VINTERLEAVE32_HI(tmp02_lo, tmp13_lo),
+                           VINTERLEAVE32_LO(tmp02_hi, tmp13_hi),
+                           VINTERLEAVE32_HI(tmp02_hi, tmp13_hi));
+  }
 }
 #endif
 
@@ -542,6 +756,12 @@ namespace lopper {
   template<> inline void VSTORE(float* addr, __m256 op) { _mm256_storeu_ps(addr, op); }
   template<> inline void VSTORE_ALIGNED(float* addr, __m256 op) { _mm256_store_ps(addr, op); }
   template<> inline __m256 VLOAD<AVX>(const float* addr) { return _mm256_loadu_ps(addr); }
+  template<> inline std::tuple<__m256, __m256, __m256> VLOAD3<AVX>(const float* addr) {
+    return _VLOAD3<AVX>(addr);
+  }
+  template<> inline std::tuple<__m256, __m256, __m256, __m256> VLOAD4<AVX>(const float* addr) {
+    return _VLOAD4<AVX>(addr);
+  }
   template<> inline __m256 VSET<AVX>(float op) { return _mm256_set1_ps(op); }
 
 #define LOPPER_SSE4_LANEWISE_UNARY_WRAPPER_FOR_AVX(OP) \
@@ -609,12 +829,31 @@ namespace lopper {
   template<> inline __m256i VLOAD<AVX>(const int32_t* addr) {
     return _VCONCAT(VLOAD<SSE>(addr), VLOAD<SSE>(addr + 4));
   }
+  template<> inline std::tuple<__m256i, __m256i, __m256i> VLOAD3<AVX>(const int32_t* addr) {
+    return _VLOAD3<AVX>(addr);
+  }
+  template<> inline std::tuple<__m256i, __m256i, __m256i, __m256i> VLOAD4<AVX>(const int32_t* addr) {
+    return _VLOAD4<AVX>(addr);
+  }
   template<> inline __m256i VLOAD<AVX>(const uint8_t* addr) {
     return _VCONCAT(VLOAD<SSE>(addr), VLOAD<SSE>(addr + 16));
   }
-  template<> inline __m256i VSET<AVX>(int32_t op) {
-    return _VCONCAT(VSET<SSE>(op), VSET<SSE>(op));
+  template<> inline std::tuple<__m256i, __m256i, __m256i> VLOAD3<AVX>(const uint8_t* addr) {
+    const auto lo = VLOAD3<SSE>(addr);
+    const auto hi = VLOAD3<SSE>(addr + 48);
+    return std::make_tuple(_VCONCAT(std::get<0>(lo), std::get<0>(hi)),
+                           _VCONCAT(std::get<1>(lo), std::get<1>(hi)),
+                           _VCONCAT(std::get<2>(lo), std::get<2>(hi)));
   }
+  template<> inline std::tuple<__m256i, __m256i, __m256i, __m256i> VLOAD4<AVX>(const uint8_t* addr) {
+    const auto lo = VLOAD4<SSE>(addr);
+    const auto hi = VLOAD4<SSE>(addr + 64);
+    return std::make_tuple(_VCONCAT(std::get<0>(lo), std::get<0>(hi)),
+                           _VCONCAT(std::get<1>(lo), std::get<1>(hi)),
+                           _VCONCAT(std::get<2>(lo), std::get<2>(hi)),
+                           _VCONCAT(std::get<3>(lo), std::get<3>(hi)));
+  }
+  template<> inline __m256i VSET<AVX>(int32_t op) { return _mm256_set1_epi32(op); }
   template<> inline __m256i VSET8x16<AVX>(uint8_t op_a, uint8_t op_b, uint8_t op_c, uint8_t op_d,
                                           uint8_t op_e, uint8_t op_f, uint8_t op_g, uint8_t op_h,
                                           uint8_t op_i, uint8_t op_j, uint8_t op_k, uint8_t op_l,
@@ -784,6 +1023,14 @@ namespace lopper {
   template<> inline void VSTORE(float* addr, float32x4_t op) { vst1q_f32(addr, op); }
   template<> inline void VSTORE_ALIGNED(float* addr, float32x4_t op) { VSTORE(addr, op); }
   template<> inline float32x4_t VLOAD<NEON>(const float* addr) { return vld1q_f32(addr); }
+  template<> inline std::tuple<float32x4_t, float32x4_t, float32x4_t> VLOAD3<NEON>(const float* addr) {
+    const auto tmp = vld3q_f32(addr);
+    return std::make_tuple(tmp.val[0], tmp.val[1], tmp.val[2]);
+  }
+  template<> inline std::tuple<float32x4_t, float32x4_t, float32x4_t, float32x4_t> VLOAD4<NEON>(const float* addr) {
+    const auto tmp = vld4q_f32(addr);
+    return std::make_tuple(tmp.val[0], tmp.val[1], tmp.val[2], tmp.val[3]);
+  }
   template<> inline float32x4_t VSET<NEON>(float op) { return vmovq_n_f32(op); }
 
   template<> inline int32x4_t VADD(int32x4_t op1, int32x4_t op2) { return vaddq_s32(op1, op2); }
@@ -825,7 +1072,28 @@ namespace lopper {
     vst4q_f32(addr, {op1, op2, op3, op4});
   }
   template<> inline int32x4_t VLOAD<NEON>(const int32_t* addr) { return vld1q_s32(addr); }
+  template<> inline std::tuple<int32x4_t, int32x4_t, int32x4_t> VLOAD3<NEON>(const int32_t* addr) {
+    const auto tmp = vld3q_s32(addr);
+    return std::make_tuple(tmp.val[0], tmp.val[1], tmp.val[2]);
+  }
+  template<> inline std::tuple<int32x4_t, int32x4_t, int32x4_t, int32x4_t> VLOAD4<NEON>(const int32_t* addr) {
+    const auto tmp = vld4q_s32(addr);
+    return std::make_tuple(tmp.val[0], tmp.val[1], tmp.val[2], tmp.val[3]);
+  }
   template<> inline int32x4_t VLOAD<NEON>(const uint8_t* addr) { return vreinterpretq_s32_u8(vld1q_u8(addr)); }
+  template<> inline std::tuple<int32x4_t, int32x4_t, int32x4_t> VLOAD3<NEON>(const uint8_t* addr) {
+    const auto tmp = vld3q_u8(addr);
+    return std::make_tuple(vreinterpretq_s32_u8(tmp.val[0]),
+                           vreinterpretq_s32_u8(tmp.val[1]),
+                           vreinterpretq_s32_u8(tmp.val[2]));
+  }
+  template<> inline std::tuple<int32x4_t, int32x4_t, int32x4_t, int32x4_t> VLOAD4<NEON>(const uint8_t* addr) {
+    const auto tmp = vld4q_u8(addr);
+    return std::make_tuple(vreinterpretq_s32_u8(tmp.val[0]),
+                           vreinterpretq_s32_u8(tmp.val[1]),
+                           vreinterpretq_s32_u8(tmp.val[2]),
+                           vreinterpretq_s32_u8(tmp.val[3]));
+  }
   template<> inline int32x4_t VSET<NEON>(int32_t op) { return vmovq_n_s32(op); }
   template<> inline int32x4_t VSET8x16<NEON>(uint8_t op_a, uint8_t op_b, uint8_t op_c, uint8_t op_d,
                                              uint8_t op_e, uint8_t op_f, uint8_t op_g, uint8_t op_h,

@@ -61,6 +61,19 @@ template<> struct MultipleTrait<int32_t, LOPPER_TARGET> {
 };
 #endif
 
+#ifdef LOPPER_TARGET_AVX  // Additionally define MultipleTrait for SSE
+template<> struct MultipleTrait<float, SSE> {
+  typedef float type;
+  typedef typename InstructionSetTrait<SSE>::FLOAT vtype;
+  constexpr static size_t num_lanes = InstructionSetTrait<SSE>::num_lanes;
+};
+
+template<> struct MultipleTrait<int32_t, SSE> {
+  typedef int32_t type;
+  typedef typename InstructionSetTrait<SSE>::INT32 vtype;
+  constexpr static size_t num_lanes = InstructionSetTrait<SSE>::num_lanes;
+};
+#endif
 #define LOPPER_BITWIDTH (::lopper::InstructionSetTrait<LOPPER_TARGET>::num_lanes * 32u)
 
 } // end namespace lopper
