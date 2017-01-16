@@ -20,82 +20,116 @@
 #define SINT32 typename InstructionSetTrait<S>::INT32
 
 namespace lopper {
+  // Add two vectors.
   template<typename T> T VADD(T op1, T op2);
-  template<typename T> T VADD_PAIRWISE(T op1, T op2); // pairwise add
+  // Concatenate two vectors, collapse pairs of elements, and return the result.
+  template<typename T> T VADD_PAIRWISE(T op1, T op2);
+  // Subtract from one vector the other.
   template<typename T> T VSUB(T op1, T op2);
+  // Multiply two vectors.
   template<typename T> T VMUL(T op1, T op2);
+  // Divide one vector by the other.
   template<typename T> T VDIV(T op1, T op2);
+  // Divide one vector by the other, accepting some numerical inaccuracy.
   template<typename T> T VDIV_FAST(T op1, T op2);
+  // Take the component-wise minimum of two vectors.
   template<typename T> T VMIN(T op1, T op2);
+  // Take the component-wise maximum of two vectors.
   template<typename T> T VMAX(T op1, T op2);
+  // Take the component-wise absolute value for the given vector.
   template<typename T> T VABS(T op1);
-  template<typename T> T VINTERLEAVE32_LO(T op1, T op2);  // interleave 32-bit lanes & get 1st half
-  template<typename T> T VINTERLEAVE32_HI(T op1, T op2);  // interleave 32-bit lanes & get 2nd half
+  // Interleave the two vectors at 32-bit granularity and return the first half.
+  template<typename T> T VINTERLEAVE32_LO(T op1, T op2);
+  // Interleave the two vectors at 32-bit granularity and return the second half.
+  template<typename T> T VINTERLEAVE32_HI(T op1, T op2);
+  // Store a vector at the given address.
   template<typename T> void VSTORE(float* addr, T op);
   template<typename T> void VSTORE(int32_t* addr, T op);
   template<typename T> void VSTORE(uint8_t* addr, T op);
+  // Store three vector at the given address, interleaving them at 32-bit granularity.
   template<typename T> void VSTORE3(float* addr, T op1, T op2, T op3);
+  // Store three vector at the given address, interleaving them at 32-bit granularity.
   template<typename T> void VSTORE3(int32_t* addr, T op1, T op2, T op3);
+  // Store three vector at the given address, interleaving them at 8-bit granularity.
   template<typename T> void VSTORE3(uint8_t* addr, T op1, T op2, T op3);
+  // Store four vector at the given address, interleaving them at 32-bit granularity.
   template<typename T> void VSTORE4(float* addr, T op1, T op2, T op3, T op4);
+  // Store four vector at the given address, interleaving them at 32-bit granularity.
   template<typename T> void VSTORE4(int32_t* addr, T op1, T op2, T op3, T op4);
+  // Store four vector at the given address, interleaving them at 8-bit granularity.
   template<typename T> void VSTORE4(uint8_t* addr, T op1, T op2, T op3, T op4);
+  // Store a vector at the given address, assuming that it has the requisite alignment.
   template<typename T> void VSTORE_ALIGNED(float* addr, T op) { VSTORE(addr, op); }
   template<typename T> void VSTORE_ALIGNED(int32_t* addr, T op) { VSTORE(addr, op); }
   template<typename T> void VSTORE_ALIGNED(uint8_t* addr, T op) { VSTORE(addr, op); }
+  // Load a vector from the given address.
   template<InstructionSet S> SFLOAT VLOAD(const float* addr);
   template<InstructionSet S> SINT32 VLOAD(const int32_t* addr);
   template<InstructionSet S> SINT32 VLOAD(const uint8_t* addr);
-  template<InstructionSet S> SINT32 VLOAD4(const int32_t* addr);
-  template<InstructionSet S> SINT32 VLOAD4(const uint8_t* addr);
-  // Set all lanes of the vector to the given value.
+  // Set all 32-bit lanes of the vector to the given 32-bit value.
   template<InstructionSet S> SFLOAT VSET(float op);
+  // Set all 32-bit lanes of the vector to the given 32-bit value.
   template<InstructionSet S> SINT32 VSET(int32_t op);
-  template<InstructionSet S> inline SINT32 VSET8(uint8_t op) {
-    return VSET<S>(op * 0x01010101);
-  }
-  // Set the first n bytes of the vector. If any argument that overflows the vector is ignored.
-  template<InstructionSet S> SINT32 VSET8x16(uint8_t op_a, uint8_t op_b, uint8_t op_c, uint8_t op_d,
-                                             uint8_t op_e, uint8_t op_f, uint8_t op_g, uint8_t op_h,
-                                             uint8_t op_i, uint8_t op_j, uint8_t op_k, uint8_t op_l,
-                                             uint8_t op_m, uint8_t op_n, uint8_t op_o, uint8_t op_p);
+  // Set all 8-bit lanes of the vector to the given 8-bit value.
+  template<InstructionSet S> inline SINT32 VSET8(uint8_t op) { return VSET<S>(op * 0x01010101); }
+  // Set the first 128 bytes of the vector. Any argument that overflows the vector is ignored.
+  template<InstructionSet S> SINT32 VSET8x16(uint8_t, uint8_t, uint8_t, uint8_t,
+                                             uint8_t, uint8_t, uint8_t, uint8_t,
+                                             uint8_t, uint8_t, uint8_t, uint8_t,
+                                             uint8_t, uint8_t, uint8_t, uint8_t);
+  // Set the first 128 bytes of the vector. Any argument that overflows the vector is ignored.
   template<InstructionSet S> SINT32 VSET4x4(int32_t, int32_t, int32_t, int32_t);
-  template<InstructionSet S> SINT32 VSET4x8(int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t);
+  // Set the first 128 bytes of the vector. Any argument that overflows the vector is ignored.
+  template<InstructionSet S> SINT32 VSET4x8(int32_t, int32_t, int32_t, int32_t,
+                                            int32_t, int32_t, int32_t, int32_t);
+  // Convert the given vector containing 32-bit integers to a vector of 32-bit float.
   template<InstructionSet S> SFLOAT VTO_FLOAT(SINT32 op1);
+  // Convert the given vector containing 32-bit floats to a vector of 32-bit integers.
   template<InstructionSet S> SINT32 VTO_INT32(SFLOAT op1);
+  // Widen the I-th quarter of the given vector, inserting zeros as necessary.
   template<InstructionSet S, size_t I> typename std::enable_if<I < 4u, SINT32>::type VEXPAND_QTR(SINT32 op);
-  template<InstructionSet S, size_t I> inline typename std::enable_if<InstructionSetTrait<S>::num_lanes == 4u &&
-                                                                      I < 4u, SINT32>::type VEXPAND_BYTE(SINT32 op) {
-    return VEXPAND_QTR<S, I>(op);
-  }
-  template<InstructionSet S> SINT32 VCOLLAPSE_TO_BYTES(SINT32 op1, SINT32 op2, SINT32 op3, SINT32 op4);
+  // Concatenate four vectors, taking the least significant bit of each 32-bit lane.
+  template<InstructionSet S> SINT32 VCOLLAPSE_TO_BYTES(SINT32, SINT32, SINT32, SINT32);
+  // Perform a logical OR of two vectors.
   template<typename T> T VBITWISE_OR(T op1, T op2);
+  // Perform a logical AND of two vectors.
   template<typename T> T VBITWISE_AND(T op1, T op2);
+  // Perform a comparison, setting the result to a nonzero value if op1 < op2, 0 otherwise.
   template<InstructionSet S> SINT32 VLT(SFLOAT op1, SFLOAT op2);
   template<InstructionSet S> SINT32 VLT(SINT32 op1, SINT32 op2);
+  // Perform an equality check, setting the result to a nonzero value if equal, 0 if unequal.
   template<InstructionSet S> SINT32 VEQ(SFLOAT op1, SFLOAT op2);
   template<InstructionSet S> SINT32 VEQ(SINT32 op1, SINT32 op2);
-  template<InstructionSet S> SFLOAT VLDEXP(SFLOAT s, SINT32 e); // Compute s * 2^e
-  // Note that standard frexp(x) returns (s, iexp) where x=s*2^iexp and 0.5<=s<1. However, VFREXP will return 1<=s<2.
+  // Compute s * 2^e.
+  template<InstructionSet S> SFLOAT VLDEXP(SFLOAT s, SINT32 e);
+  // Compute the floating-point decomposition, i.e. given x, find s and iexp such that x=s*2^iexp.
+  // Note that standard frexp(x) returns 0.5<=s<1. However, VFREXP will return 1<=s<2.
   template<InstructionSet S> SFLOAT VFREXP(SFLOAT x, SINT32& iexp);
-  template<InstructionSet S> SFLOAT VLOOKUP_FP_ARRAY(const float* arr, SINT32 index); // Return arr[index] without boundary checking.
-  template<InstructionSet S> SINT32 VSELECT(SINT32 mask, SINT32 op1, SINT32 op2); // mask==0?op1:op2
-  template<InstructionSet S> SFLOAT VSELECT(SINT32 mask, SFLOAT op1, SFLOAT op2); // mask==0?op1:op2
-  // Takes the least significant 8-bit of each lane and compact.
-  template<InstructionSet S> typename std::enable_if<InstructionSetTrait<S>::num_lanes == 1, uint8_t>::type VNARROW_TO_8BIT(SINT32 op);
-  template<InstructionSet S> typename std::enable_if<InstructionSetTrait<S>::num_lanes == 4, uint32_t>::type VNARROW_TO_8BIT(SINT32 op);
-  template<InstructionSet S> typename std::enable_if<InstructionSetTrait<S>::num_lanes == 8, uint64_t>::type VNARROW_TO_8BIT(SINT32 op);
-
-  // Shuffles the lanes. If the highest bit of index is set, the output will be zero.
+  // Return the lane corresponding to the index. No boundary checking is performed.
+  template<InstructionSet S> SFLOAT VLOOKUP_FP_ARRAY(const float* arr, SINT32 index);
+  // Multiplex between operands based on each 32-bit lane value of the mask, i.e. mask==0?op1:op2.
+  template<InstructionSet S> SINT32 VSELECT(SINT32 mask, SINT32 op1, SINT32 op2);
+  template<InstructionSet S> SFLOAT VSELECT(SINT32 mask, SFLOAT op1, SFLOAT op2);
+  // Take the least significant 8-bit of each lane and compact.
+  template<InstructionSet S> typename
+  std::enable_if<InstructionSetTrait<S>::num_lanes == 1, uint8_t>::type VNARROW_TO_8BIT(SINT32 op);
+  template<InstructionSet S> typename
+  std::enable_if<InstructionSetTrait<S>::num_lanes == 4, uint32_t>::type VNARROW_TO_8BIT(SINT32 op);
+  template<InstructionSet S> typename
+  std::enable_if<InstructionSetTrait<S>::num_lanes == 8, uint64_t>::type VNARROW_TO_8BIT(SINT32 op);
+  // Shuffles the lanes at 32-bit granularity, i.e. out[x] = op1[index[x]].
+  // If the highest bit of an index is set, the lane will be zero.
   // Other OOB values lead to platform-dependent behavior.
-  template<InstructionSet S> SINT32 VSHUFFLE8(SINT32 op1, SINT32 index);
   template<InstructionSet S> SINT32 VSHUFFLE32(SINT32 op1, SINT32 index);
-  // NOTE: VSHUFFLE should be deprecated in the future to avoid confusion.
-  template<InstructionSet S> inline SINT32 VSHUFFLE(SINT32 op1, SINT32 index) {
-    return VSHUFFLE8<S>(op1, index);  // Preserve old behavior.
+  // Shuffles the lanes at 8-bit granularity.
+  template<InstructionSet S> SINT32 VSHUFFLE8(SINT32 op1, SINT32 index);
+  template<InstructionSet S> SINT32 VSHUFFLE(SINT32 op1, SINT32 index) {  // To be deprecated.
+    return VSHUFFLE8<S>(op1, index);
   }
+  // Cast the given vector to a vector of 32-bit float without altering content.
   template<InstructionSet S> SFLOAT VCAST_FLOAT(SINT32 op1);
   template<InstructionSet S> SFLOAT VCAST_FLOAT(SFLOAT op1) { return op1; }
+  // Cast the given vector to a vector of 32-bit integers without altering content.
   template<InstructionSet S> SINT32 VCAST_INT32(SFLOAT op1);
   template<InstructionSet S> SINT32 VCAST_INT32(SINT32 op1) { return op1; }
 }
