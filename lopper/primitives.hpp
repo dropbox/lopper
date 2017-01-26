@@ -1053,23 +1053,23 @@ namespace lopper {
   template<> inline void VSTORE(int32_t* addr, int32x4_t op) { vst1q_s32(addr, op); }
   template<> inline void VSTORE(uint8_t* addr, int32x4_t op) { vst1q_u8(addr, vreinterpretq_u8_s32(op)); }
   template<> inline void VSTORE3(int32_t* addr, int32x4_t op1, int32x4_t op2, int32x4_t op3) {
-    vst3q_s32(addr, {op1, op2, op3});
+    vst3q_s32(addr, ((int32x4x3_t){op1, op2, op3}));
   }
   template<> inline void VSTORE3(uint8_t* addr, int32x4_t op1, int32x4_t op2, int32x4_t op3) {
-    vst3q_u8(addr, {vreinterpretq_u8_s32(op1), vreinterpretq_u8_s32(op2), vreinterpretq_u8_s32(op3)});
+    vst3q_u8(addr, ((uint8x16x3_t){vreinterpretq_u8_s32(op1), vreinterpretq_u8_s32(op2), vreinterpretq_u8_s32(op3)}));
   }
   template<> inline void VSTORE3(float* addr, float32x4_t op1, float32x4_t op2, float32x4_t op3) {
-    vst3q_f32(addr, {op1, op2, op3});
+    vst3q_f32(addr, ((float32x4x3_t){op1, op2, op3}));
   }
   template<> inline void VSTORE4(int32_t* addr, int32x4_t op1, int32x4_t op2, int32x4_t op3, int32x4_t op4) {
-    vst4q_s32(addr, {op1, op2, op3, op4});
+    vst4q_s32(addr, ((int32x4x4_t){op1, op2, op3, op4}));
   }
   template<> inline void VSTORE4(uint8_t* addr, int32x4_t op1, int32x4_t op2, int32x4_t op3, int32x4_t op4) {
-    vst4q_u8(addr, {vreinterpretq_u8_s32(op1), vreinterpretq_u8_s32(op2),
-          vreinterpretq_u8_s32(op3), vreinterpretq_u8_s32(op4)});
+    vst4q_u8(addr, ((uint8x16x4_t){vreinterpretq_u8_s32(op1), vreinterpretq_u8_s32(op2),
+          vreinterpretq_u8_s32(op3), vreinterpretq_u8_s32(op4)}));
   }
   template<> inline void VSTORE4(float* addr, float32x4_t op1, float32x4_t op2, float32x4_t op3, float32x4_t op4) {
-    vst4q_f32(addr, {op1, op2, op3, op4});
+    vst4q_f32(addr, ((float32x4x4_t){op1, op2, op3, op4}));
   }
   template<> inline int32x4_t VLOAD<NEON>(const int32_t* addr) { return vld1q_s32(addr); }
   template<> inline std::tuple<int32x4_t, int32x4_t, int32x4_t> VLOAD3<NEON>(const int32_t* addr) {
