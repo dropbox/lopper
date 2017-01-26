@@ -85,6 +85,7 @@ namespace lopper {
   template<InstructionSet S> SINT32 VSET(int32_t op);
   // Set all 8-bit lanes of the vector to the given 8-bit value.
   template<InstructionSet S> inline SINT32 VSET8(uint8_t op) { return VSET<S>(op * 0x01010101); }
+  template<InstructionSet S> inline SINT32 VSET16(uint16_t op) { return VSET<S>(op * 0x00010001); }
   // Set the first 128 bytes of the vector. Any argument that overflows the vector is ignored.
   template<InstructionSet S> SINT32 VSET8x16(uint8_t, uint8_t, uint8_t, uint8_t,
                                              uint8_t, uint8_t, uint8_t, uint8_t,
