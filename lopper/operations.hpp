@@ -45,14 +45,19 @@ template<typename T, typename E> struct _ExprTypeConvert :
   _ExprTypeConvert(const E& e) : UnaryExpr<T, E, _OperationTypeConvert<T, typename E::type>>(e) {}
 };
 
-// In theory, T could be inferred from J::eval<S> methods, but this is internal.
-template<typename T, typename E0, typename J> struct _ExprLambda1 : public UnaryExpr<T, E0, J> {
-  _ExprLambda1(const E0& e0) : UnaryExpr<T, E0, J>(e0) {}
+template<typename T> struct _ExprLambda0 : public NullaryExpr<T> {
+  _ExprLambda0(const std::function<T(int, int)>& func) : _func(func) {}
+  void prepareRow(const int y) const { _y = y; }
+  template<InstructionSet S, size_t U, typename ... Cxt> Multiple<T, S> inline eval(const int x, const Cxt& ...) const {
+    T tmp[InstructionSetTrait<S>::num_lanes];
+    for (int i = 0; i < static_cast<int>(InstructionSetTrait<S>::num_lanes); i++) {
+      tmp[i] = _func(x + i, _y);
+    }
+    return VLOAD<S>(tmp);
+  }
+  const std::function<T(int, int)> _func;
+  mutable int _y;
 };
-
-template<typename T, typename J, typename E0> _ExprLambda1<T, E0, J> ExprLambda(const E0& exp0) {
-  return _ExprLambda1<T, E0, J>(exp0);
-}
 
 /*=============================== BinaryExpr ===============================*/
 
@@ -273,20 +278,20 @@ SFINAE<(std::is_same<float, T>::value || std::is_same<int32_t, T>::value) && !st
   return _ExprTypeConvert<T, E0>(exp0);
 }
 
-template<typename E0> _ExprLambda1<typename E0::type, E0, _OperationAbs<typename E0::type>> ExprAbs(const E0& exp0) {
-  return _ExprLambda1<typename E0::type, E0, _OperationAbs<typename E0::type>>(exp0);
+template<typename E0> UnaryExpr<typename E0::type, E0, _OperationAbs<typename E0::type>> ExprAbs(const E0& exp0) {
+  return UnaryExpr<typename E0::type, E0, _OperationAbs<typename E0::type>>(exp0);
 }
 
-template<typename E0> _ExprLambda1<typename E0::type, E0, _OperationSquare<typename E0::type>> ExprSquare(const E0& exp0) {
-  return _ExprLambda1<typename E0::type, E0, _OperationSquare<typename E0::type>>(exp0);
+template<typename E0> UnaryExpr<typename E0::type, E0, _OperationSquare<typename E0::type>> ExprSquare(const E0& exp0) {
+  return UnaryExpr<typename E0::type, E0, _OperationSquare<typename E0::type>>(exp0);
 }
 
-template<size_t bits, typename E0> _ExprLambda1<typename E0::type, E0, _OperationShiftLeft<typename E0::type, bits>> ExprShiftLeft(const E0& exp0) {
-  return _ExprLambda1<typename E0::type, E0, _OperationShiftLeft<typename E0::type, bits>>(exp0);
+template<size_t bits, typename E0> UnaryExpr<typename E0::type, E0, _OperationShiftLeft<typename E0::type, bits>> ExprShiftLeft(const E0& exp0) {
+  return UnaryExpr<typename E0::type, E0, _OperationShiftLeft<typename E0::type, bits>>(exp0);
 }
 
-template<size_t bits, typename E0> _ExprLambda1<typename E0::type, E0, _OperationShiftRight<typename E0::type, bits>> ExprShiftRight(const E0& exp0) {
-  return _ExprLambda1<typename E0::type, E0, _OperationShiftRight<typename E0::type, bits>>(exp0);
+template<size_t bits, typename E0> UnaryExpr<typename E0::type, E0, _OperationShiftRight<typename E0::type, bits>> ExprShiftRight(const E0& exp0) {
+  return UnaryExpr<typename E0::type, E0, _OperationShiftRight<typename E0::type, bits>>(exp0);
 }
 
 #define DECLARE_BINARY_KERNEL(KERNEL, NAME) template<typename E0, typename E1> \
@@ -347,6 +352,14 @@ template<typename K> struct _ChainedOperation {
 
 DECLARE_VARIADIC_OP_FOR_BINARY_KERNEL(_OperationMin, ExprMin);
 DECLARE_VARIADIC_OP_FOR_BINARY_KERNEL(_OperationMax, ExprMax);
+
+template<typename T> _ExprLambda0<T> ExprLambda(const std::function<T(int, int)>& func) {
+  return _ExprLambda0<T>(func);
+}
+
+template<typename T, typename J, typename E0> UnaryExpr<T, E0, J> ExprLambda(const E0& exp0) {
+  return UnaryExpr<T, E0, J>(exp0);
+}
 
 // TODO: In theory, T could be inferred from J::eval<S> methods.
 template<typename T, typename J, typename E0, typename E1>

@@ -564,6 +564,44 @@ TYPED_TEST_P(LopperTypedTest, RGBToHSVTest) {
   ASSERT_EQ(0u, out(1, 0, 2));
 }
 
+namespace {
+  // A sample lambda for the lambda test.
+  struct MyLambda {
+    template<InstructionSet S> inline static Multiple<int32_t, S>
+    eval(const Multiple<int32_t, S>& v) {
+      return VMUL(v, VSET<S>(9));
+    }
+  };
+}
+
+TYPED_TEST_P(LopperTypedTest, LambdaTest) {
+  Image<int32_t> out(1, 99, 99);
+  { // Test a nullary lambda
+    auto e = ExprLambda<int32_t>([](int x, int y) { return x + (y * 2); });
+    ExprEvalSIMD(TypeParam::value, Expr<1>(out) = e);
+    for (int y = 0; y < 99; y++) {
+      for (int x = 0; x < 99; x++) {
+        ASSERT_EQ(x + (y * 2), out(x, y));
+      }
+    }
+  }
+  { // Test a unary lambda
+    Image<int32_t> in(1, 99, 99);
+    for (int y = 0; y < in.getHeight(); y++) {
+      for (int x = 0; x < in.getWidth(); x++) {
+        in(x, y) = rand() & 0xff;
+      }
+    }
+    auto e_in = Expr<1>(in);
+    ExprEvalSIMD(TypeParam::value, Expr<1>(out) = ExprLambda<int32_t, MyLambda>(e_in));
+    for (int y = 0; y < 99; y++) {
+      for (int x = 0; x < 99; x++) {
+        ASSERT_EQ(in(x, y) * 9, out(x, y));
+      }
+    }
+  }
+}
+
 // Instantiate typed tests.
 REGISTER_TYPED_TEST_CASE_P(LopperTypedTest,
                            SizeValidationTest,
@@ -583,6 +621,7 @@ REGISTER_TYPED_TEST_CASE_P(LopperTypedTest,
                            FourChannelTest,
                            RerunTest,
                            RGBToHSVTest,
+                           LambdaTest,
                            ScopeTest);
 
 template<InstructionSet S> struct LopperSettingType {
