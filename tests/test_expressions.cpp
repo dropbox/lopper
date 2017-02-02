@@ -331,6 +331,27 @@ TYPED_TEST_P(LopperTypedTest, ShiftTest) {
   }
 }
 
+TYPED_TEST_P(LopperTypedTest, SquareAndAbsTest) {
+  Image<int32_t> in1(1, 99, 99);
+  for (int y = 0; y < in1.getHeight(); y++) {
+    for (int x = 0; x < in1.getWidth(); x++) {
+      for (int c = 0; c < in1.getChannelCount(); c++) {
+        in1(x, y, c) = int(rand() & 0xff) - 128;
+      }
+    }
+  }
+  Image<int32_t> out_abs(1, 99, 99);
+  Image<int32_t> out_sqr(1, 99, 99);
+  ExprEvalSIMD(TypeParam::value, Expr<1>(out_abs) = ExprAbs(Expr<1>(in1)));
+  ExprEvalSIMD(TypeParam::value, Expr<1>(out_sqr) = ExprSquare(Expr<1>(in1)));
+  for (int y = 0; y < in1.getHeight(); y++) {
+    for (int x = 0; x < in1.getWidth(); x++) {
+      ASSERT_EQ(in1(x, y) > 0 ? in1(x, y) : -in1(x, y), out_abs(x, y));
+      ASSERT_EQ(in1(x, y) * in1(x, y), out_sqr(x, y));
+    }
+  }
+}
+
 TYPED_TEST_P(LopperTypedTest, CacheTest) {
   Image<float> in(1, 100, 100);
   Image<float> out(1, 100, 100);
@@ -554,6 +575,7 @@ REGISTER_TYPED_TEST_CASE_P(LopperTypedTest,
                            MinimumMaximumTest,
                            BitwiseOperationsTest,
                            ShiftTest,
+                           SquareAndAbsTest,
                            ReindexOffsetTest,
                            CacheTest,
                            TwoChannelTest,

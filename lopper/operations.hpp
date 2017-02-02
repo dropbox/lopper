@@ -33,6 +33,13 @@ template<typename T> struct _OperationAbs {
   }
 };
 
+template<typename T> struct _OperationSquare {
+  typedef T type;
+  template<InstructionSet S> static Multiple<T, S> eval(const Multiple<T, S>& in0) {
+    return VMUL(in0, in0);
+  }
+};
+
 template<typename T, typename E> struct _ExprTypeConvert :
   public UnaryExpr<T, E, _OperationTypeConvert<T, typename E::type>> {
   _ExprTypeConvert(const E& e) : UnaryExpr<T, E, _OperationTypeConvert<T, typename E::type>>(e) {}
@@ -268,6 +275,10 @@ SFINAE<(std::is_same<float, T>::value || std::is_same<int32_t, T>::value) && !st
 
 template<typename E0> _ExprLambda1<typename E0::type, E0, _OperationAbs<typename E0::type>> ExprAbs(const E0& exp0) {
   return _ExprLambda1<typename E0::type, E0, _OperationAbs<typename E0::type>>(exp0);
+}
+
+template<typename E0> _ExprLambda1<typename E0::type, E0, _OperationSquare<typename E0::type>> ExprSquare(const E0& exp0) {
+  return _ExprLambda1<typename E0::type, E0, _OperationSquare<typename E0::type>>(exp0);
 }
 
 template<size_t bits, typename E0> _ExprLambda1<typename E0::type, E0, _OperationShiftLeft<typename E0::type, bits>> ExprShiftLeft(const E0& exp0) {
