@@ -601,6 +601,23 @@ TYPED_TEST_P(LopperTypedTest, LambdaTest) {
     }
   }
 }
+TYPED_TEST_P(LopperTypedTest, AccumulateTest) {
+  Image<int32_t> in(1, 99, 99);
+  Image<int32_t> out(1, 99, 99);
+  for (int y = 0; y < in.getHeight(); y++) {
+    for (int x = 0; x < in.getWidth(); x++) {
+      in(x, y) = rand() & 0xff;
+      out(x, y) = in(x, y);
+    }
+  }
+  auto e_in = Expr<1>(in);
+  ExprEvalSIMD(TypeParam::value, Expr<1>(out) += Expr<int32_t>(5));
+  for (int y = 0; y < 99; y++) {
+    for (int x = 0; x < 99; x++) {
+      ASSERT_EQ(in(x, y) + 5, out(x, y));
+    }
+  }
+}
 
 // Instantiate typed tests.
 REGISTER_TYPED_TEST_CASE_P(LopperTypedTest,
@@ -622,6 +639,7 @@ REGISTER_TYPED_TEST_CASE_P(LopperTypedTest,
                            RerunTest,
                            RGBToHSVTest,
                            LambdaTest,
+                           AccumulateTest,
                            ScopeTest);
 
 template<InstructionSet S> struct LopperSettingType {

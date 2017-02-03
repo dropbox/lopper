@@ -11,6 +11,7 @@
 #include "expression.hpp"
 #include "image.hpp"
 #include "multiple.hpp"
+#include "operations.hpp"
 #include "primitives.hpp"
 #include "util.hpp"
 
