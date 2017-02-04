@@ -269,6 +269,32 @@ TYPED_TEST_P(LopperTypedTest, ReindexOffsetTest) {
   }
 }
 
+TYPED_TEST_P(LopperTypedTest, ReindexMultiChannelTest) {
+  const int width = 123, height = 233;
+  Image<uint8_t> input(3, width, height);
+  Image<uint8_t> output(3, width, height);
+  auto flipper = [height](int x) { return height - 1 - x; };
+  for (int y = 0; y < input.getHeight(); y++) {
+    for (int x = 0; x < input.getWidth(); x++) {
+      input(x, y, 0) = (x * 1 + y * 3) & 0xff;
+      input(x, y, 1) = (x * 2 + y * 7) & 0xff;
+      input(x, y, 2) = (x * 4 + y * 5) & 0xff;
+    }
+  }
+  ExprPrepareContext();
+  auto v = ExprCache(Expr<3>(input).reindex(flipper).offset(1, 0));
+  ExprEvalWithContextSIMD(TypeParam::value, Expr<3>(output) = std::make_tuple(v.template get<0>(),
+                                                                              v.template get<1>(),
+                                                                              v.template get<2>()));
+  for (int y = 0; y < height; y++) {
+    for (int x = 0; x < width; x++) {
+      for (int c = 0; c < 3; c++) {
+        ASSERT_EQ(input(std::min(width - 1, x + 1), height - 1 - y, c), output(x, y, c));
+      }
+    }
+  }
+}
+
 TYPED_TEST_P(LopperTypedTest, MinimumMaximumTest) {
   Image<uint8_t> in1(1, 100, 100);
   Image<uint8_t> in2(1, 100, 100);
@@ -627,6 +653,7 @@ REGISTER_TYPED_TEST_CASE_P(LopperTypedTest,
                            OffsetTest,
                            GradientTest,
                            ReindexTest,
+                           ReindexMultiChannelTest,
                            MinimumMaximumTest,
                            BitwiseOperationsTest,
                            ShiftTest,

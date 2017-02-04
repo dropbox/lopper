@@ -118,7 +118,7 @@ template<> struct _DimensionChecker::_Handler<std::true_type> {
     state.widths.insert(e.getWidth());
   }
   LOPPER_DECLARE_PROPERTY_CHECK_HANDLER(getHeight) {
-    // XXX: This is a hack because reindexed or translated _ExprImage1 still declares getHeight(),
+    // XXX: This is a hack because reindexed or translated _ExprImage still declares getHeight(),
     // which should be ignored. Hence it returns -1 at the moment to signal that it's to be ignored.
     auto h = e.getHeight();
     if (h != -1) {

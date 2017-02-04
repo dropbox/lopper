@@ -75,10 +75,13 @@ template<> struct _PixelLoader<LOPPER_TARGET> {
   template<typename T, size_t C> static constexpr size_t bytesPerOp() {
     return _DataLoader<sizeof(T), C>::bytesPerOp();
   }
-  template<typename T> inline static MultipleIO<T, LOPPER_TARGET> load(const T* ptr) {
-    return _DataLoader<sizeof(T), 1>::template load<T>(ptr);
+  template<typename T> inline static MultipleIOTuple<T, 1, LOPPER_TARGET> load(const T* ptr) {
+    return std::make_tuple(_DataLoader<sizeof(T), 1>::template load<T>(ptr));
   }
-  template<typename T, size_t C> inline static MultipleIOTuple<T, C, LOPPER_TARGET> load(const T* ptr) {
+  template<typename T, size_t C> inline static SFINAE<(C==1), MultipleIOTuple<T, C, LOPPER_TARGET>> load(const T* ptr) {
+    return load<T>(ptr);
+  }
+  template<typename T, size_t C> inline static SFINAE<(C>1), MultipleIOTuple<T, C, LOPPER_TARGET>> load(const T* ptr) {
     return _DataLoader<sizeof(T), C>::template load<T>(ptr);
   }
 };
@@ -422,14 +425,14 @@ private:
 // but one can instantiate writers via calling assignment operators, as long as the image hasn't been reindexed.
 // DefaultX, DefaultY indicate whether the image has nontrivial reindexing horizontally or vertically, respectively.
 
-template<typename T, bool DefaultX=true, bool DefaultY=true>
-struct _ExprImage1 : public NullaryExpr<typename IOTypeTrait<T>::type> {
-  _ExprImage1(std::shared_ptr<_Image<T>> image) : _ExprImage1(image, 0, [](int y) { return y; }) {}
+template<typename T, size_t C, bool DefaultX=true, bool DefaultY=true>
+struct _ExprImage : public NullaryExpr<typename IOTypeTrait<T>::type> {
+  _ExprImage(std::shared_ptr<_Image<T>> image) : _ExprImage(image, 0, [](int y) { return y; }) {}
 
   virtual int getWidth() const { return _image->getWidth(); }
   virtual int getHeight() const { return DefaultY ? _image->getHeight() : -1; }
   virtual size_t getSIMDClearance() const {
-    const size_t bytes_read = _PixelLoader<LOPPER_TARGET>::template bytesPerOp<T, 1>();
+    const size_t bytes_read = _PixelLoader<LOPPER_TARGET>::template bytesPerOp<T, C>();
     const size_t bytes_per_pixel = sizeof(T);
     return (bytes_read + (bytes_per_pixel - 1)) / bytes_per_pixel;
   }
@@ -440,72 +443,52 @@ struct _ExprImage1 : public NullaryExpr<typename IOTypeTrait<T>::type> {
     _width = this->_image->getWidth(); // cache this to avoid calling the virtual function in eval(...).
   }
 
-  template<InstructionSet S, size_t U, typename ... Cxt> inline
-  MultipleIO<T, S> eval(const int x, const Cxt& ...) const {
+  template<InstructionSet S, size_t U, typename ... Cxt>
+  inline MultipleIOTuple<T, C, S> eval(const int x, const Cxt& ...) const {
     if (DefaultX) {
-      return _PixelLoader<S>::template load<T>(_ptr + x);
+      return _PixelLoader<S>::template load<T, C>(_ptr + x * C);
     } else if (S != SCALAR) {
       // _execute(...) guarantees that the SIMD portion of the loop will only access valid areas even with translation.
-      return _PixelLoader<S>::template load<T>(_ptr + x + _dx);
+      return _PixelLoader<S>::template load<T, C>(_ptr + (x + _dx) * C);
     } else {
       const int offset = std::min(std::max(0, (int)x + _dx), _width - 1);
-      return _PixelLoader<S>::template load<T>(_ptr + offset);
+      return _PixelLoader<S>::template load<T, C>(_ptr + offset * C);
     }
   }
 
+  template<typename ... E> auto operator=(const std::tuple<E...>& t) ->
+    SFINAE<(sizeof...(E) == C && sizeof...(E) == 3), _ExprSaveN<T, E...>> {
+    _check_writability();
+    return _ExprSaveN<T, E...>(_image, std::get<0>(t), std::get<1>(t), std::get<2>(t));
+  }
+
+  template<typename ... E> auto operator=(const std::tuple<E...>& t) ->
+    SFINAE<(sizeof...(E) == C && sizeof...(E) == 4), _ExprSaveN<T, E...>> {
+    _check_writability();
+    return _ExprSaveN<T, E...>(_image, std::get<0>(t), std::get<1>(t), std::get<2>(t), std::get<3>(t));
+  }
+
   // Returns the expression representing a read-only image, with the given offset to be used during indexing.
-  _ExprImage1<T, false, false> offset(int dx, int dy) const {
+  _ExprImage<T, C, false, false> offset(int dx, int dy) const {
     auto ymap_local = this->_ymap;
-    return _ExprImage1<T, false, false>(this->_image, _dx + dx,
-                                        [ymap_local, dy](int y) { return ymap_local(y) + dy; });
+    return _ExprImage<T, C, false, false>(this->_image, _dx + dx,
+                                          [ymap_local, dy](int y) { return ymap_local(y) + dy; });
   }
 
   // Returns the expression representing a read-only image, with the given row remapping.
   // That is, it corresponds logically to an image whose y-th row is the func(y)-th row of the source.
-  _ExprImage1<T, DefaultX, false> reindex(const std::function<int(int)>& func) const {
+  _ExprImage<T, C, DefaultX, false> reindex(const std::function<int(int)>& func) const {
     auto ymap_local = this->_ymap;
-    return _ExprImage1<T, DefaultX, false>(this->_image, _dx,
-                                           [ymap_local, func](int y) { return func(ymap_local(y)); });
+    return _ExprImage<T, C, DefaultX, false>(this->_image, _dx,
+                                             [ymap_local, func](int y) { return func(ymap_local(y)); });
   }
 
   virtual int getHorizontalOffset() const { return _dx; }
 
-  // NOTE: It would be nice to use C++14's decltype(auto) here, but in the meantime we define operators
-  // to enable Expr(image) += ... and other syntactic sugars.
-  template<typename E> auto operator+=(const E& e) ->
-    _ExprSave1<T, decltype(std::declval<_ExprImage1<T, DefaultX, DefaultY>>() + std::declval<E>())> {
-    _check_writability();
-    auto final_exp = *this + e;
-    return _ExprSave1<T, decltype(final_exp)>(this->_image, final_exp);
-  }
-
-  template<typename E> auto operator-=(const E& e) ->
-    _ExprSave1<T, decltype(std::declval<_ExprImage1<T, DefaultX, DefaultY>>() - std::declval<E>())> {
-    _check_writability();
-    auto final_exp = *this - e;
-    return _ExprSave1<T, decltype(final_exp)>(this->_image, final_exp);
-  }
-
-  template<typename E> auto operator*=(const E& e) ->
-    _ExprSave1<T, decltype(std::declval<_ExprImage1<T, DefaultX, DefaultY>>() * std::declval<E>())> {
-    _check_writability();
-    auto final_exp = *this * e;
-    return _ExprSave1<T, decltype(final_exp)>(this->_image, final_exp);
-  }
-
-  template<typename E> auto operator=(const E& e) -> _ExprSave1<T, E> {
-    _check_writability();
-    return _ExprSave1<T, E>(this->_image, e);
-  }
-
-  _ExprSave1<T, _ExprImage1<T, DefaultX, DefaultY>> operator=(const _ExprImage1<T, DefaultX, DefaultY>& e) {
-    _check_writability();
-    return _ExprSave1<T, _ExprImage1<T, DefaultX, DefaultY>>(this->_image, e);
-  }
 private:
-  _ExprImage1(const std::shared_ptr<_Image<T>>& image, int dx, const std::function<int(int)>& ymap) :
+  _ExprImage(const std::shared_ptr<_Image<T>>& image, int dx, const std::function<int(int)>& ymap) :
     _image(image), _dx(dx), _ymap(ymap) {
-    if (_image->getChannelCount() != 1) { throw LopperException("Invalid number of channels"); }
+    if (_image->getChannelCount() != C) { throw LopperException("Invalid number of channels"); }
   }
   void _check_writability() const {
     static_assert(DefaultX && DefaultY, "Cannot write into a translated image expression");
@@ -515,42 +498,71 @@ private:
   mutable int _width;
   std::function<int(int)> _ymap;
   mutable T* _ptr;
+  template<typename, size_t, bool, bool> friend struct _ExprImage;
   template<typename, bool, bool> friend struct _ExprImage1;
 };
 
-template<typename T, size_t C> struct _ExprImage : public NullaryExpr<typename IOTypeTrait<T>::type> {
-  _ExprImage(std::shared_ptr<_Image<T>> image) : _image(image) {
-    if (_image->getChannelCount() != C) { throw LopperException("Invalid number of channels"); }
+// A special case for 1-channel image to enable extra operations.
+template<typename T, bool DefaultX=true, bool DefaultY=true>
+struct _ExprImage1 : public _ExprImage<T, 1, DefaultX, DefaultY> {
+  _ExprImage1(std::shared_ptr<_Image<T>> image) : _ExprImage<T, 1, DefaultX, DefaultY>(image) {}
+
+  template<InstructionSet S, size_t U, typename ... Cxt> inline
+  MultipleIO<T, S> eval(const int x, const Cxt& ...cxt) const {
+    return std::get<0>(this->_ExprImage<T, 1, DefaultX, DefaultY>::template eval<S, U, Cxt...>(x, cxt...));
   }
 
-  virtual int getWidth() const { return _image->getWidth(); }
-  virtual int getHeight() const { return _image->getHeight(); }
-  virtual size_t getSIMDClearance() const {
-    const size_t bytes_read = _PixelLoader<LOPPER_TARGET>::template bytesPerOp<T, C>();
-    const size_t bytes_per_pixel = sizeof(T);
-    return (bytes_read + (bytes_per_pixel - 1)) / bytes_per_pixel;
+  // Returns the expression representing a read-only image, with the given offset to be used during indexing.
+  _ExprImage1<T, false, false> offset(int dx, int dy) const {
+    auto ymap_local = this->_ymap;
+    return _ExprImage1<T, false, false>(this->_image, this->_dx + dx,
+                                        [ymap_local, dy](int y) { return ymap_local(y) + dy; });
   }
 
-  void prepareRow(const int y) const { _ptr = _image->getRowPointer(y); }
-
-  template<InstructionSet S, size_t U, typename ... Cxt>
-  MultipleIOTuple<T, C, S> inline eval(const int x, const Cxt& ... ) const {
-    return _PixelLoader<S>::template load<T, C>(_ptr + x * C);
+  // Returns the expression representing a read-only image, with the given row remapping.
+  // That is, it corresponds logically to an image whose y-th row is the func(y)-th row of the source.
+  _ExprImage1<T, DefaultX, false> reindex(const std::function<int(int)>& func) const {
+    auto ymap_local = this->_ymap;
+    return _ExprImage1<T, DefaultX, false>(this->_image, this->_dx,
+                                           [ymap_local, func](int y) { return func(ymap_local(y)); });
   }
 
-  template<typename ... E> auto operator=(const std::tuple<E...>& t) ->
-    SFINAE<(sizeof...(E) == C && sizeof...(E) == 3), _ExprSaveN<T, E...>> {
-    return _ExprSaveN<T, E...>(_image, std::get<0>(t), std::get<1>(t), std::get<2>(t));
+  // NOTE: It would be nice to use C++14's decltype(auto) here, but in the meantime we define operators
+  // to enable Expr(image) += ... and other syntactic sugars.
+  template<typename E> auto operator+=(const E& e) ->
+    _ExprSave1<T, decltype(std::declval<_ExprImage1<T, DefaultX, DefaultY>>() + std::declval<E>())> {
+    this->_check_writability();
+    auto final_exp = *this + e;
+    return _ExprSave1<T, decltype(final_exp)>(this->_image, final_exp);
   }
 
-  template<typename ... E> auto operator=(const std::tuple<E...>& t) ->
-    SFINAE<(sizeof...(E) == C && sizeof...(E) == 4), _ExprSaveN<T, E...>> {
-    return _ExprSaveN<T, E...>(_image, std::get<0>(t), std::get<1>(t), std::get<2>(t), std::get<3>(t));
+  template<typename E> auto operator-=(const E& e) ->
+    _ExprSave1<T, decltype(std::declval<_ExprImage1<T, DefaultX, DefaultY>>() - std::declval<E>())> {
+    this->_check_writability();
+    auto final_exp = *this - e;
+    return _ExprSave1<T, decltype(final_exp)>(this->_image, final_exp);
   }
 
+  template<typename E> auto operator*=(const E& e) ->
+    _ExprSave1<T, decltype(std::declval<_ExprImage1<T, DefaultX, DefaultY>>() * std::declval<E>())> {
+    this->_check_writability();
+    auto final_exp = *this * e;
+    return _ExprSave1<T, decltype(final_exp)>(this->_image, final_exp);
+  }
+
+  template<typename E> auto operator=(const E& e) -> _ExprSave1<T, E> {
+    this->_check_writability();
+    return _ExprSave1<T, E>(this->_image, e);
+  }
+
+  _ExprSave1<T, _ExprImage1<T, DefaultX, DefaultY>> operator=(const _ExprImage1<T, DefaultX, DefaultY>& e) {
+    this->_check_writability();
+    return _ExprSave1<T, _ExprImage1<T, DefaultX, DefaultY>>(this->_image, e);
+  }
 private:
-  mutable T* _ptr;
-  std::shared_ptr<_Image<T>> _image;
+  _ExprImage1(const std::shared_ptr<_Image<T>>& image, int dx, const std::function<int(int)>& ymap) :
+    _ExprImage<T, 1, DefaultX, DefaultY>(image, dx, ymap) {}
+  template<typename, bool, bool> friend struct _ExprImage1;
 };
 
 } // end namespace internal
