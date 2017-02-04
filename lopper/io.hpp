@@ -115,10 +115,24 @@ template<> struct _DataLoader<1, 2> {
 };
 
 template<> struct _DataLoader<1, 3> {
-  inline static constexpr size_t bytesPerOp() { return LOPPER_BITWIDTH >> 3; }
+  inline static constexpr size_t bytesPerOp() {
+#ifdef LOPPER_TARGET_NEON
+    return (LOPPER_BITWIDTH >> 3) * 3 / 2;
+#else
+    return LOPPER_BITWIDTH >> 3;
+#endif
+  }
   template<typename T> inline static MultipleIOTuple<T, 3, LOPPER_TARGET> load(const T* ptr) {
     // T is expected to be uint8_t
     static_assert(std::is_same<T, uint8_t>::value, "Expect uint8_t");
+#ifdef LOPPER_TARGET_NEON
+    // This is performance-critical on mobile, so we commit the cardinal sin of
+    // introducing platform-dependent logic outside primitives.hpp.
+    const uint8x8x3_t tmp = vld3_u8(ptr);
+    return std::make_tuple(vreinterpretq_s32_u32(vmovl_u16(vget_low_u16(vmovl_u8(tmp.val[0])))),
+                           vreinterpretq_s32_u32(vmovl_u16(vget_low_u16(vmovl_u8(tmp.val[1])))),
+                           vreinterpretq_s32_u32(vmovl_u16(vget_low_u16(vmovl_u8(tmp.val[2])))));
+#else
     constexpr size_t num_lanes = InstructionSetTrait<LOPPER_TARGET>::num_lanes;
     const auto in = VLOAD<LOPPER_TARGET>(ptr);
     if (num_lanes == 4u) {
@@ -144,6 +158,7 @@ template<> struct _DataLoader<1, 3> {
                              VBITWISE_AND(VSHIFTR<8>(tmp), VSET<LOPPER_TARGET>(255)),
                              VSHIFTR<16>(tmp));
     }
+#endif
   }
 };
 
