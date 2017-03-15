@@ -737,8 +737,17 @@ namespace lopper {
 #if defined LOPPER_TARGET_AVX
 namespace lopper {
   // Some helpers to make delegating to SSE easier.
-  inline __m256i _VCONCAT(__m128i op1, __m128i op2) { return _mm256_setr_m128i(op1, op2); }
-  inline __m256 _VCONCAT(__m128 op1, __m128 op2) { return _mm256_setr_m128(op1, op2); }
+  inline __m256i _VCONCAT(__m128i op1, __m128i op2) {
+    // NOTE(jongmin): _mm256_setr_m128i seems unavailable in gcc 4.9.
+#if defined __clang__
+  return _mm256_setr_m128i(op1, op2);
+#else
+  return _mm256_inserti128_si256(_mm256_castsi128_si256(op1), op2, 1);
+#endif
+  }
+  inline __m256 _VCONCAT(__m128 op1, __m128 op2) {
+    return _mm256_castsi256_ps(_VCONCAT(_mm_castps_si128(op1), _mm_castps_si128(op2)));
+  }
   inline __m128i _VLO(__m256i op1) { return _mm256_castsi256_si128(op1); }
   inline __m128 _VLO(__m256 op1) { return _mm256_castps256_ps128(op1); }
   inline __m128i _VHI(__m256i op1) { return _mm256_extractf128_si256(op1, 1); }
@@ -767,13 +776,13 @@ namespace lopper {
 
 #define LOPPER_SSE4_LANEWISE_UNARY_WRAPPER_FOR_AVX(OP) \
   template<> inline __m256i OP(__m256i op1) { \
-    return _mm256_setr_m128i(OP(_mm256_castsi256_si128(op1)), \
-                             OP(_mm256_extractf128_si256(op1, 1))); }
+    return _VCONCAT(OP(_mm256_castsi256_si128(op1)), \
+                    OP(_mm256_extractf128_si256(op1, 1))); }
   // XXX: Probably should test if _mm256_castsi256_si128 is actually more performant.
 #define LOPPER_SSE4_LANEWISE_BINARY_WRAPPER_FOR_AVX(OP) \
   template<> inline __m256i OP(__m256i op1, __m256i op2) { \
-    return _mm256_setr_m128i(OP(_mm256_castsi256_si128(op1), _mm256_castsi256_si128(op2)), \
-                             OP(_mm256_extractf128_si256(op1, 1), _mm256_extractf128_si256(op2, 1))); }
+    return _VCONCAT(OP(_mm256_castsi256_si128(op1), _mm256_castsi256_si128(op2)), \
+                    OP(_mm256_extractf128_si256(op1, 1), _mm256_extractf128_si256(op2, 1))); }
   LOPPER_SSE4_LANEWISE_BINARY_WRAPPER_FOR_AVX(VADD);
   LOPPER_SSE4_LANEWISE_BINARY_WRAPPER_FOR_AVX(VSUB);
   LOPPER_SSE4_LANEWISE_BINARY_WRAPPER_FOR_AVX(VMUL);
