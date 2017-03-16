@@ -739,10 +739,10 @@ namespace lopper {
   // Some helpers to make delegating to SSE easier.
   inline __m256i _VCONCAT(__m128i op1, __m128i op2) {
     // NOTE(jongmin): _mm256_setr_m128i seems unavailable in gcc 4.9.
-#if defined __clang__
+#if defined __clang__xxx
   return _mm256_setr_m128i(op1, op2);
 #else
-  return _mm256_inserti128_si256(_mm256_castsi128_si256(op1), op2, 1);
+  return _mm256_insertf128_si256(_mm256_castsi128_si256(op1), op2, 1);
 #endif
   }
   inline __m256 _VCONCAT(__m128 op1, __m128 op2) {
