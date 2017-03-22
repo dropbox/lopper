@@ -65,7 +65,7 @@ TYPED_TEST_P(LopperTypedPrimitiveTest, ExponentiationTest) {
     }
     // Test VFREXP.
     auto viexp = VSET<TypeParam::value>(0);
-    int32_t iexp[4];
+    int32_t iexp[8];
     VSTORE(buffer_fout, VFREXP<TypeParam::value>(VLOAD<TypeParam::value>(buffer_in), viexp));
     VSTORE(buffer_iout, viexp);
     for (size_t i = 0; i < TypeParam::num_lanes; i++) {
@@ -101,8 +101,8 @@ TYPED_TEST_P(LopperTypedPrimitiveTest, LoadTest) {
 }
 
 TYPED_TEST_P(LopperTypedPrimitiveTest, LoadUInt8IntoInt32Test) {
-  uint8_t buffer_in[32];
-  for (int i = 0; i < 32; i++) {
+  uint8_t buffer_in[33];
+  for (int i = 0; i < 33; i++) {
     buffer_in[i] = (uint8_t)i;
   }
   uint8_t buffer_out[TypeParam::bitwidth / 8];
