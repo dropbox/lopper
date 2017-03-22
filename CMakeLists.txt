@@ -22,6 +22,9 @@ include_directories (".")
 OPTION (USE_AVX "Use Intel Streaming SIMD Extensions (AVX)" OFF)
 if (USE_AVX)
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx")
+  if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fabi-version=6")
+  endif ()
 endif (USE_AVX)
 
 # Turn on SSE.
